@@ -14,14 +14,14 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import requests
-import google.generativeai as genai
+from google import genai
 
 
 # 定数
 GITHUB_API_URL = "https://api.github.com/repos/anthropics/claude-code/releases"
 REPORTS_DIR = Path(__file__).parent.parent / "reports" / "claude-code"
 LAST_CHECKED_FILE = REPORTS_DIR / "last-checked.json"
-GEMINI_MODEL = "gemini-2.0-flash-exp"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 
 class ReleaseChecker:
@@ -33,9 +33,8 @@ class ReleaseChecker:
         if not self.gemini_api_key:
             raise ValueError("環境変数 GEMINI_API_KEY が設定されていません")
 
-        # Gemini APIの設定
-        genai.configure(api_key=self.gemini_api_key)
-        self.model = genai.GenerativeModel(GEMINI_MODEL)
+        # Gemini APIクライアントの設定
+        self.client = genai.Client(api_key=self.gemini_api_key)
 
         # reportsディレクトリが存在しない場合は作成
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -152,7 +151,10 @@ class ReleaseChecker:
 """
 
         try:
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+            )
             summary = response.text.strip()
             print(f"要約完了: {version}")
             return summary
