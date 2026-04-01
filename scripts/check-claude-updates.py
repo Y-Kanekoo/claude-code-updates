@@ -96,9 +96,7 @@ class ReleaseChecker:
             response.raise_for_status()
 
             releases = response.json()
-            # プレリリースを除外
-            releases = [r for r in releases if not r.get("prerelease", False)]
-            print(f"{len(releases)} 件のリリースを取得しました（プレリリース除外）")
+            print(f"{len(releases)} 件のリリースを取得しました")
             return releases
 
         except requests.exceptions.RequestException as e:
