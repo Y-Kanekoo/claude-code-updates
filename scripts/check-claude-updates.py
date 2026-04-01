@@ -22,6 +22,7 @@ GITHUB_API_URL = "https://api.github.com/repos/anthropics/claude-code/releases"
 REPORTS_DIR = Path(__file__).parent.parent / "reports" / "claude-code"
 LAST_CHECKED_FILE = REPORTS_DIR / "last-checked.json"
 GEMINI_MODEL = "gemini-2.0-flash"
+DISCORD_EMBED_COLOR = 0x8B5CF6  # 紫色
 
 
 class ReleaseChecker:
@@ -35,6 +36,12 @@ class ReleaseChecker:
 
         # Gemini APIの設定
         self.client = genai.Client(api_key=self.gemini_api_key)
+
+        # GitHub APIトークン（任意）
+        self.github_token = os.getenv("GITHUB_TOKEN")
+
+        # Discord Webhook URL（任意）
+        self.discord_webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
 
         # reportsディレクトリが存在しない場合は作成
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -75,16 +82,23 @@ class ReleaseChecker:
         """GitHub APIからリリース一覧を取得"""
         print("GitHub APIからリリース情報を取得中...")
 
+        headers = {"Accept": "application/vnd.github.v3+json"}
+        if self.github_token:
+            headers["Authorization"] = f"Bearer {self.github_token}"
+            print("GitHub認証済みリクエストを使用します")
+
         try:
             response = requests.get(
                 GITHUB_API_URL,
-                headers={"Accept": "application/vnd.github.v3+json"},
+                headers=headers,
                 timeout=30
             )
             response.raise_for_status()
 
             releases = response.json()
-            print(f"{len(releases)} 件のリリースを取得しました")
+            # プレリリースを除外
+            releases = [r for r in releases if not r.get("prerelease", False)]
+            print(f"{len(releases)} 件のリリースを取得しました（プレリリース除外）")
             return releases
 
         except requests.exceptions.RequestException as e:
@@ -206,6 +220,43 @@ class ReleaseChecker:
             print(f"エラー: レポートファイルの保存に失敗しました: {e}")
             raise
 
+    def send_discord_notification(self, release: Dict, summary: str):
+        """Discord Webhookに新リリース通知を送信"""
+        if not self.discord_webhook_url:
+            print("Discord Webhook URLが設定されていないため、通知をスキップします")
+            return
+
+        version = release.get("tag_name", "unknown")
+        published_at = release.get("published_at", "")
+        html_url = release.get("html_url", "")
+
+        # Discord embedのdescriptionは4096文字まで
+        max_len = 2000
+        description = summary[:max_len] + "\n..." if len(summary) > max_len else summary
+
+        payload = {
+            "embeds": [{
+                "title": f"Claude Code {version} がリリースされました",
+                "description": description,
+                "color": DISCORD_EMBED_COLOR,
+                "url": html_url,
+                "footer": {"text": "Claude Code Updates"},
+                "timestamp": published_at
+            }]
+        }
+
+        try:
+            response = requests.post(
+                self.discord_webhook_url,
+                json=payload,
+                timeout=30
+            )
+            response.raise_for_status()
+            print(f"Discord通知を送信しました: {version}")
+        except requests.exceptions.RequestException as e:
+            # 通知失敗は致命的エラーとしない
+            print(f"警告: Discord通知の送信に失敗しました: {e}")
+
     def run(self):
         """メイン処理"""
         print("=" * 60)
@@ -247,6 +298,9 @@ class ReleaseChecker:
 
                 # レポートを作成
                 date_str = self.create_report(release, summary)
+
+                # Discord通知を送信
+                self.send_discord_notification(release, summary)
 
                 latest_version = version
                 latest_date = date_str
