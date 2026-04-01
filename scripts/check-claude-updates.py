@@ -143,6 +143,8 @@ class ReleaseChecker:
 
 要約は以下の形式で出力してください:
 
+> **TL;DR**: （このリリース全体を1〜2文で端的に要約）
+
 ### 新機能
 （新機能があれば箇条書きで記載、なければ「なし」）
 
@@ -156,6 +158,7 @@ class ReleaseChecker:
 （破壊的変更があれば箇条書きで記載、なければ「なし」）
 
 注意事項:
+- TL;DRは必ず1〜2文で記載してください
 - 各項目は簡潔な日本語で記載してください
 - 技術的な詳細は適度に含めてください
 - 箇条書きは「-」で始めてください
@@ -183,6 +186,7 @@ class ReleaseChecker:
         """レポートファイルを作成"""
         version = release.get("tag_name", "unknown")
         published_at = release.get("published_at", "")
+        html_url = release.get("html_url", "")
 
         # 日付をパース
         try:
@@ -197,6 +201,10 @@ class ReleaseChecker:
         report_content = f"""# Claude Code 更新レポート
 
 ## {version} ({date_str})
+
+| リリース日 | リリースページ |
+|-----------|---------------|
+| {date_str} | [GitHub →]({html_url}) |
 
 {summary}
 
@@ -218,6 +226,20 @@ class ReleaseChecker:
             print(f"エラー: レポートファイルの保存に失敗しました: {e}")
             raise
 
+    def _extract_tldr(self, summary: str) -> str:
+        """summaryからTL;DRテキストを抽出"""
+        lines = summary.splitlines()
+        for i, line in enumerate(lines):
+            if "TL;DR" in line:
+                # 同行にテキストがあればそれを使う（> **TL;DR**: テキスト の形式）
+                after = line.split("TL;DR", 1)[-1].strip(" *:：>")
+                if after:
+                    return after
+                # なければ次の行を使う
+                if i + 1 < len(lines) and lines[i + 1].strip():
+                    return lines[i + 1].strip()
+        return summary[:200]  # フォールバック
+
     def send_discord_notification(self, release: Dict, summary: str):
         """Discord Webhookに新リリース通知を送信"""
         if not self.discord_webhook_url:
@@ -228,9 +250,8 @@ class ReleaseChecker:
         published_at = release.get("published_at", "")
         html_url = release.get("html_url", "")
 
-        # Discord embedのdescriptionは4096文字まで
-        max_len = 2000
-        description = summary[:max_len] + "\n..." if len(summary) > max_len else summary
+        # TL;DRのみをdescriptionに使用
+        description = self._extract_tldr(summary)
 
         payload = {
             "embeds": [{
