@@ -21,7 +21,7 @@ from google import genai
 GITHUB_API_URL = "https://api.github.com/repos/anthropics/claude-code/releases"
 REPORTS_DIR = Path(__file__).parent.parent / "reports" / "claude-code"
 LAST_CHECKED_FILE = REPORTS_DIR / "last-checked.json"
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-1.5-flash"
 DISCORD_EMBED_COLOR = 0x8B5CF6  # 紫色
 SECTION_LABELS = [
     ("新機能",     "✨ 新機能"),
