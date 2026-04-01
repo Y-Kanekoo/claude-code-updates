@@ -3,7 +3,7 @@
 Claude Code リリースチェッカー
 
 GitHub APIでanthropics/claude-codeのリリースを監視し、
-新規リリースをGemini APIで要約して保存します。
+新規リリースをGroq APIで要約して保存します。
 """
 
 import json
@@ -14,14 +14,14 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import requests
-from google import genai
+from groq import Groq
 
 
 # 定数
 GITHUB_API_URL = "https://api.github.com/repos/anthropics/claude-code/releases"
 REPORTS_DIR = Path(__file__).parent.parent / "reports" / "claude-code"
 LAST_CHECKED_FILE = REPORTS_DIR / "last-checked.json"
-GEMINI_MODEL = "gemini-2.0-flash-lite"
+LLM_MODEL = "llama-3.3-70b-versatile"
 DISCORD_EMBED_COLOR = 0x8B5CF6  # 紫色
 SECTION_LABELS = [
     ("新機能",     "✨ 新機能"),
@@ -36,12 +36,12 @@ class ReleaseChecker:
 
     def __init__(self):
         """初期化処理"""
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
-        if not self.gemini_api_key:
-            raise ValueError("環境変数 GEMINI_API_KEY が設定されていません")
+        self.groq_api_key = os.getenv("GROQ_API_KEY")
+        if not self.groq_api_key:
+            raise ValueError("環境変数 GROQ_API_KEY が設定されていません")
 
-        # Gemini APIの設定
-        self.client = genai.Client(api_key=self.gemini_api_key)
+        # Groq APIの設定
+        self.client = Groq(api_key=self.groq_api_key)
 
         # GitHub APIトークン（任意）
         self.github_token = os.getenv("GITHUB_TOKEN")
@@ -172,16 +172,16 @@ class ReleaseChecker:
 """
 
         try:
-            response = self.client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=prompt
+            response = self.client.chat.completions.create(
+                model=LLM_MODEL,
+                messages=[{"role": "user", "content": prompt}]
             )
-            summary = response.text.strip()
+            summary = response.choices[0].message.content.strip()
             print(f"要約完了: {version}")
             return summary
 
         except Exception as e:
-            print(f"エラー: Gemini APIでの要約に失敗しました: {e}")
+            print(f"エラー: Groq APIでの要約に失敗しました: {e}")
             raise
 
     def create_report(

@@ -37,7 +37,7 @@ jobs:
 
       - name: レポートを生成
         env:
-          GEMINI_API_KEY: ${{ secrets.CLAUDE_UPDATES_GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.CLAUDE_UPDATES_GROQ_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISCORD_WEBHOOK_URL: ${{ secrets.CLAUDE_UPDATES_DISCORD_WEBHOOK_URL }}
         run: |
