@@ -34,7 +34,7 @@ jobs:
 
       - name: レポートを生成
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.CLAUDE_UPDATES_GEMINI_API_KEY }}
         run: |
           python scripts/check-claude-updates.py
 
