@@ -23,6 +23,12 @@ REPORTS_DIR = Path(__file__).parent.parent / "reports" / "claude-code"
 LAST_CHECKED_FILE = REPORTS_DIR / "last-checked.json"
 GEMINI_MODEL = "gemini-2.0-flash"
 DISCORD_EMBED_COLOR = 0x8B5CF6  # 紫色
+SECTION_LABELS = [
+    ("新機能",     "✨ 新機能"),
+    ("改善",       "🔧 改善"),
+    ("バグ修正",   "🐛 バグ修正"),
+    ("破壊的変更", "⚠️ 破壊的変更"),
+]
 
 
 class ReleaseChecker:
@@ -226,6 +232,26 @@ class ReleaseChecker:
             print(f"エラー: レポートファイルの保存に失敗しました: {e}")
             raise
 
+    def _parse_sections(self, summary: str) -> Dict[str, str]:
+        """summaryを ### セクション名 ごとに分割して辞書で返す"""
+        sections: Dict[str, str] = {}
+        current_key = None
+        current_lines: List[str] = []
+
+        for line in summary.splitlines():
+            if line.startswith("### "):
+                if current_key:
+                    sections[current_key] = "\n".join(current_lines).strip()
+                current_key = line[4:].strip()
+                current_lines = []
+            elif current_key:
+                current_lines.append(line)
+
+        if current_key:
+            sections[current_key] = "\n".join(current_lines).strip()
+
+        return sections
+
     def _extract_tldr(self, summary: str) -> str:
         """summaryからTL;DRテキストを抽出"""
         lines = summary.splitlines()
@@ -250,8 +276,19 @@ class ReleaseChecker:
         published_at = release.get("published_at", "")
         html_url = release.get("html_url", "")
 
-        # TL;DRのみをdescriptionに使用
+        # TL;DRをdescriptionに、各セクションをfieldsに設定
         description = self._extract_tldr(summary)
+        sections = self._parse_sections(summary)
+
+        fields = []
+        for key, label in SECTION_LABELS:
+            value = sections.get(key, "なし")
+            if not value.strip():
+                value = "なし"
+            # Discord field valueは1024文字上限
+            if len(value) > 1024:
+                value = value[:1020] + "\n..."
+            fields.append({"name": label, "value": value, "inline": True})
 
         payload = {
             "embeds": [{
@@ -259,6 +296,7 @@ class ReleaseChecker:
                 "description": description,
                 "color": DISCORD_EMBED_COLOR,
                 "url": html_url,
+                "fields": fields,
                 "footer": {"text": "Claude Code Updates"},
                 "timestamp": published_at
             }]
