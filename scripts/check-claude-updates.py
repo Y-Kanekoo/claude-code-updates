@@ -24,10 +24,12 @@ LAST_CHECKED_FILE = REPORTS_DIR / "last-checked.json"
 LLM_MODEL = "llama-3.3-70b-versatile"
 DISCORD_EMBED_COLOR = 0x8B5CF6  # 紫色
 SECTION_LABELS = [
-    ("新機能",     "✨ 新機能"),
-    ("改善",       "🔧 改善"),
-    ("バグ修正",   "🐛 バグ修正"),
-    ("破壊的変更", "⚠️ 破壊的変更"),
+    ("TL;DR",           "📌 TL;DR"),
+    ("破壊的変更",       "⚠️ 破壊的変更"),
+    ("要対応・確認事項", "📋 要対応・確認事項"),
+    ("新機能",           "✨ 新機能"),
+    ("改善",             "🔧 改善"),
+    ("バグ修正",         "🐛 バグ修正"),
 ]
 
 
@@ -139,36 +141,56 @@ class ReleaseChecker:
         return new_releases
 
     def summarize_release_notes(self, release_notes: str, version: str) -> str:
-        """Gemini APIでリリースノートを日本語要約"""
+        """Groq APIでリリースノートを日本語要約"""
         print(f"リリースノート {version} を要約中...")
 
-        prompt = f"""以下のClaude Codeのリリースノートを日本語で要約してください。
+        prompt = f"""以下は `Claude Code` のリリースノートです。日本のエンジニア向けに、Markdown で読みやすく要約してください。
+
+出力ルール:
+- Markdown のみを出力し、前置き・説明・締めの一文は書かない
+- 見出し名は以下の指定を一字一句そのまま使い、順番も固定する
+- すべての見出しを必ず出す。省略・追加・改名をしない
+- 各見出しの本文は「- 」で始まる箇条書き、または「なし」のどちらかにする
+- 各セクション最大3項目まで。重要度の低い項目から削る
+- 各箇条書きは1文で簡潔に書く
+- 重要度順に整理する。最優先は破壊的変更と要対応事項
+- 製品名、CLI コマンド、設定キー、API 名、コード識別子は原文のまま `backticks` で残す
+- 不自然な直訳を避け、日本語として自然に言い換える
+- 推測しない。原文にない効果・意図・背景は書かない
+- 影響対象は原文から明確な場合のみ書く
+- 同じ内容を複数セクションに重複して書かない
+- 表・番号付きリスト・入れ子リスト・コードブロックは使わない
+- 影響度の基準:
+  - 高: 破壊的変更・移行必須・既定動作の変更が明確にある
+  - 中: よく使う機能・CLI・CIへの実質的な変更がある
+  - 低: 限定的な改善やバグ修正が中心
+  - 要確認: 原文だけでは判断しきれない
+- 破壊的変更: 互換性破壊・削除・移行必須が原文から明確なら「あり」、なければ「なし」、不明なら「要確認」
+
+必ず次の形式で出力すること:
+
+### TL;DR
+- （このリリースで最も重要な変更を1〜2文で要約）
+- **影響度**: 高 / 中 / 低 / 要確認
+- **破壊的変更**: あり / なし / 要確認
+
+### 破壊的変更
+（破壊的変更があれば箇条書き、なければ「なし」）
+
+### 要対応・確認事項
+（ユーザーが確認・対応した方がよい点があれば箇条書き、なければ「なし」）
+
+### 新機能
+（新機能があれば箇条書き、なければ「なし」）
+
+### 改善
+（改善があれば箇条書き、なければ「なし」）
+
+### バグ修正
+（バグ修正があれば箇条書き、なければ「なし」）
 
 リリースノート:
 {release_notes}
-
-要約は以下の形式で出力してください:
-
-> **TL;DR**: （このリリース全体を1〜2文で端的に要約）
-
-### 新機能
-（新機能があれば箇条書きで記載、なければ「なし」）
-
-### 改善
-（改善があれば箇条書きで記載、なければ「なし」）
-
-### バグ修正
-（バグ修正があれば箇条書きで記載、なければ「なし」）
-
-### 破壊的変更
-（破壊的変更があれば箇条書きで記載、なければ「なし」）
-
-注意事項:
-- TL;DRは必ず1〜2文で記載してください
-- 各項目は簡潔な日本語で記載してください
-- 技術的な詳細は適度に含めてください
-- 箇条書きは「-」で始めてください
-- セクションの見出し（###）は必ず含めてください
 """
 
         try:
@@ -206,11 +228,10 @@ class ReleaseChecker:
         # レポート内容を生成
         report_content = f"""# Claude Code 更新レポート
 
-## {version} ({date_str})
+## {version}
 
-| リリース日 | リリースページ |
-|-----------|---------------|
-| {date_str} | [GitHub →]({html_url}) |
+- **リリース日**: {date_str}
+- **リリースページ**: [GitHub →]({html_url})
 
 {summary}
 
@@ -253,17 +274,14 @@ class ReleaseChecker:
         return sections
 
     def _extract_tldr(self, summary: str) -> str:
-        """summaryからTL;DRテキストを抽出"""
-        lines = summary.splitlines()
-        for i, line in enumerate(lines):
-            if "TL;DR" in line:
-                # 同行にテキストがあればそれを使う（> **TL;DR**: テキスト の形式）
-                after = line.split("TL;DR", 1)[-1].strip(" *:：>")
-                if after:
-                    return after
-                # なければ次の行を使う
-                if i + 1 < len(lines) and lines[i + 1].strip():
-                    return lines[i + 1].strip()
+        """summaryのTL;DRセクションから要約文（最初の非メタ箇条書き）を抽出"""
+        sections = self._parse_sections(summary)
+        tldr_text = sections.get("TL;DR", "")
+        for line in tldr_text.splitlines():
+            stripped = line.lstrip("- ").strip()
+            # **影響度**: や **破壊的変更**: などのメタ行を除外
+            if stripped and not stripped.startswith("**"):
+                return stripped
         return summary[:200]  # フォールバック
 
     def send_discord_notification(self, release: Dict, summary: str):
