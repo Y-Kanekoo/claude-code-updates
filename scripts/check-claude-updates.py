@@ -24,13 +24,15 @@ LAST_CHECKED_FILE = REPORTS_DIR / "last-checked.json"
 LLM_MODEL = "llama-3.3-70b-versatile"
 DISCORD_EMBED_COLOR = 0x8B5CF6  # 紫色
 SECTION_LABELS = [
-    ("TL;DR",           "📌 TL;DR"),
-    ("破壊的変更",       "⚠️ 破壊的変更"),
-    ("要対応・確認事項", "📋 要対応・確認事項"),
-    ("新機能",           "✨ 新機能"),
-    ("改善",             "🔧 改善"),
-    ("バグ修正",         "🐛 バグ修正"),
+    ("TL;DR",              "📌 TL;DR"),
+    ("破壊的変更",          "⚠️ 破壊的変更"),
+    ("先に押さえるポイント", "⚡ 先に押さえるポイント"),
+    ("新機能",              "✨ 新機能"),
+    ("改善",                "🔧 改善"),
+    ("バグ修正",            "🐛 バグ修正"),
 ]
+GITHUB_REPO_URL = "https://github.com/anthropics/claude-code"
+DOCS_BASE_URL = "https://docs.anthropic.com/ja/docs/claude-code"
 
 
 class ReleaseChecker:
@@ -165,20 +167,20 @@ class ReleaseChecker:
   - 中: よく使う機能・CLI・CIへの実質的な変更がある
   - 低: 限定的な改善やバグ修正が中心
   - 要確認: 原文だけでは判断しきれない
-- 破壊的変更: 互換性破壊・削除・移行必須が原文から明確なら「あり」、なければ「なし」、不明なら「要確認」
+- 破壊的変更: 互換性破壊・削除・移行必須が原文から明確なら「あり」、原文に明示がなければ「公式リリースノート上の明示なし」、不明なら「要確認」
 
 必ず次の形式で出力すること:
 
 ### TL;DR
 - （このリリースで最も重要な変更を1〜2文で要約）
 - **影響度**: 高 / 中 / 低 / 要確認
-- **破壊的変更**: あり / なし / 要確認
+- **破壊的変更**: あり / 公式リリースノート上の明示なし / 要確認
 
 ### 破壊的変更
-（破壊的変更があれば箇条書き、なければ「なし」）
+（破壊的変更が原文に明記されていれば箇条書き、なければ「公式リリースノート上の明示なし」）
 
-### 要対応・確認事項
-（ユーザーが確認・対応した方がよい点があれば箇条書き、なければ「なし」）
+### 先に押さえるポイント
+（意思決定に重要な情報を3項目以内で。「誰に影響するか」「何を確認すべきか」「注意点」を優先。なければ「なし」）
 
 ### 新機能
 （新機能があれば箇条書き、なければ「なし」）
@@ -209,7 +211,8 @@ class ReleaseChecker:
     def create_report(
         self,
         release: Dict,
-        summary: str
+        summary: str,
+        prev_version: Optional[str] = None,
     ) -> str:
         """レポートファイルを作成"""
         version = release.get("tag_name", "unknown")
@@ -225,6 +228,19 @@ class ReleaseChecker:
         except (ValueError, AttributeError):
             date_str = datetime.now().strftime("%Y-%m-%d")
 
+        # 関連リンクを構築
+        related_links = [
+            f"- [GitHub Release]({html_url})",
+        ]
+        if prev_version:
+            compare_url = f"{GITHUB_REPO_URL}/compare/{prev_version}...{version}"
+            related_links.append(f"- [差分比較: {prev_version}...{version}]({compare_url})")
+        related_links += [
+            f"- [Claude Code 公式ドキュメント]({DOCS_BASE_URL})",
+            f"- [変更履歴]({DOCS_BASE_URL}/changelog)",
+        ]
+        related_links_md = "\n".join(related_links)
+
         # レポート内容を生成
         report_content = f"""# Claude Code 更新レポート
 
@@ -234,6 +250,10 @@ class ReleaseChecker:
 - **リリースページ**: [GitHub →]({html_url})
 
 {summary}
+
+### 関連リンク
+
+{related_links_md}
 
 ---
 *このレポートは自動生成されています*
@@ -360,6 +380,7 @@ class ReleaseChecker:
             new_releases.reverse()
             latest_version = None
             latest_date = None
+            prev_version = last_version  # compare URL用に前バージョンを追跡
 
             for release in new_releases:
                 version = release.get("tag_name", "unknown")
@@ -372,13 +393,14 @@ class ReleaseChecker:
                 summary = self.summarize_release_notes(release_notes, version)
 
                 # レポートを作成
-                date_str = self.create_report(release, summary)
+                date_str = self.create_report(release, summary, prev_version)
 
                 # Discord通知を送信
                 self.send_discord_notification(release, summary)
 
                 latest_version = version
                 latest_date = date_str
+                prev_version = version  # 次のリリースのprev_versionとして使用
 
             # 最新バージョンを保存
             if latest_version:
