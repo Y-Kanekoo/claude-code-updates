@@ -1,86 +1,64 @@
-# Claude Code 更新監視
+# Claude Code 更新レポート
 
-Claude Codeのリリースを監視し、日本語でレポートを自動生成するツールです。
+Claude Code（Anthropic）の GitHub リリースを毎日監視し、日本語要約レポートを自動生成するツールです。
 
-## 概要
-
-このプロジェクトは、Claude Codeの最新リリース情報を定期的に取得し、Gemini APIを使用して日本語で要約されたレポートを自動生成します。GitHub Actionsによる自動化により、最新の更新情報を見逃しません。
-
-## 機能
-
-- **自動監視**: GitHub ActionsでClaude Codeのリリースを毎日チェック
-- **日本語要約**: Gemini APIでリリースノートを日本語に翻訳・要約
-- **自動レポート生成**: Markdownレポートを自動生成・コミット
-- **履歴管理**: 過去のリリース情報をreportsディレクトリに保存
-
-## セットアップ手順
-
-### 1. リポジトリの準備
-
-```bash
-# リポジトリをクローン
-git clone <your-repo-url>
-cd claude-code-updates
-
-# 依存パッケージをインストール
-pip install -r requirements.txt
-```
-
-### 2. GitHub Secretsの設定
-
-1. GitHubリポジトリの「Settings」→「Secrets and variables」→「Actions」を開く
-2. 「New repository secret」をクリック
-3. 以下のシークレットを追加:
-   - **Name**: `GEMINI_API_KEY`
-   - **Value**: あなたのGemini APIキー
-
-### 3. GitHub Actionsの有効化
-
-1. リポジトリの「Actions」タブを開く
-2. ワークフローを有効化
-3. 毎日自動的に実行されます（UTC 0:00）
-
-## ローカル実行方法
-
-```bash
-# 環境変数を設定
-export GEMINI_API_KEY="your-api-key-here"
-
-# スクリプトを実行
-python scripts/check_updates.py
-```
-
-実行後、`reports/`ディレクトリに最新のレポートが生成されます。
-
-## ディレクトリ構成
+## 動作フロー
 
 ```
-claude-code-updates/
+GitHub Actions（毎日 JST 9:00）
+  ↓
+GitHub API でリリース一覧を取得
+  ↓
+新リリースがあれば Groq API（LLaMA 3.3 70B）で日本語要約
+  ↓
+Markdown レポートを reports/ に保存 → index.md / index.json を更新
+  ↓
+Discord に通知
+```
+
+## レポート一覧
+
+→ [reports/claude-code/index.md](./reports/claude-code/index.md)
+
+## セットアップ
+
+GitHub リポジトリの **Settings → Secrets and variables → Actions** に以下を登録してください。
+
+| シークレット名 | 必須 | 用途 |
+|---|---|---|
+| `CLAUDE_UPDATES_GROQ_API_KEY` | ✅ | Groq API（LLaMA 3.3 70B）でリリースノートを日本語要約 |
+| `CLAUDE_UPDATES_DISCORD_WEBHOOK_URL` | 任意 | 新リリース・失敗時の Discord 通知 |
+
+### Groq API キーの取得
+
+1. [console.groq.com](https://console.groq.com) でアカウント作成
+2. **API Keys → Create API Key**（有効期限: No expiration 推奨）
+3. 生成したキーを `CLAUDE_UPDATES_GROQ_API_KEY` に登録
+
+## 使用技術
+
+| 項目 | 内容 |
+|---|---|
+| 実行環境 | GitHub Actions（ubuntu-latest） |
+| 言語 | Python 3.11 |
+| LLM | Groq API / LLaMA 3.3 70B（無料枠: 14,400 リクエスト/日） |
+| 監視対象 | [anthropics/claude-code](https://github.com/anthropics/claude-code/releases) |
+| スケジュール | 毎日 0:00 UTC（JST 9:00） |
+
+## ファイル構成
+
+```
+├── scripts/
+│   ├── check-claude-updates.py   # メインスクリプト（リリース取得・要約・通知）
+│   └── generate-index.py         # インデックス生成スクリプト
+├── reports/
+│   └── claude-code/
+│       ├── index.md              # リリース一覧（自動生成）
+│       ├── index.json            # 機械処理用 JSON（自動生成）
+│       ├── last-checked.json     # 最終チェックバージョン記録
+│       └── YYYY-MM-DD-vX.X.X.md # 各リリースの日本語レポート
 ├── .github/
 │   └── workflows/
-│       └── check-updates.yml    # GitHub Actions ワークフロー定義
-├── reports/                      # 生成されたレポートを保存
-│   └── YYYY-MM-DD.md            # 日付ごとのレポート
-├── scripts/
-│   └── check_updates.py         # メイン監視スクリプト
-├── requirements.txt              # Python依存パッケージ
-└── README.md                     # このファイル
+│       └── claude-updates.yml    # GitHub Actions ワークフロー
+└── requirements.txt
 ```
-
-## 動作の仕組み
-
-1. **定期実行**: GitHub Actionsが毎日UTC 0:00に起動
-2. **リリース取得**: GitHub APIからClaude Codeの最新リリース情報を取得
-3. **日本語要約**: Gemini APIでリリースノートを日本語に翻訳・要約
-4. **レポート生成**: Markdown形式でレポートを生成
-5. **自動コミット**: 新しいレポートをリポジトリに自動コミット
-
-## ライセンス
-
-MIT License
-
-## 注意事項
-
-- Gemini APIキーは絶対にコミットしないでください
-- GitHub Secretsに保存することで安全に管理できます
-- APIの利用制限に注意してください

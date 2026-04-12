@@ -43,13 +43,17 @@ jobs:
         run: |
           python scripts/check-claude-updates.py
 
+      - name: インデックスを更新
+        run: |
+          python scripts/generate-index.py
+
       - name: 変更を確認
         id: check_changes
         run: |
           if [[ -n $(git status --porcelain) ]]; then
             echo "has_changes=true" >> $GITHUB_OUTPUT
             # 新しいレポートのバージョンを取得（最新のファイル名から抽出）
-            latest_report=$(ls -t reports/claude-code/*.md 2>/dev/null | head -n 1)
+            latest_report=$(ls -t reports/claude-code/*.md 2>/dev/null | grep -v index.md | head -n 1)
             if [[ -n "$latest_report" ]]; then
               version=$(basename "$latest_report" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || echo "latest")
               echo "version=$version" >> $GITHUB_OUTPUT
@@ -68,3 +72,14 @@ jobs:
           git add .
           git commit -m "[docs] Claude Code ${{ steps.check_changes.outputs.version }} の更新レポートを追加"
           git push
+
+      - name: 失敗時に Discord へ通知
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.CLAUDE_UPDATES_DISCORD_WEBHOOK_URL }}
+        run: |
+          if [[ -n "$DISCORD_WEBHOOK_URL" ]]; then
+            curl -s -X POST "$DISCORD_WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d "{\"content\": \"⚠️ Claude Code 更新チェックが失敗しました。[Actions ログを確認してください](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\"}"
+          fi
