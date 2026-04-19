@@ -13,3 +13,10 @@ venv/
 
 # macOS
 .DS_Store
+
+# Project catalog（個人情報のためコミット対象外）
+reports/claude-code/.project_catalog.json
+
+# Marp中間成果物（GitHub Actions で再生成されるためコミット不要）
+docs/slides/src/
+docs/slides/*.html

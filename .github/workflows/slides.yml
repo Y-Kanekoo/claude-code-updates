@@ -1,0 +1,52 @@
+name: Publish Slides
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "reports/claude-code/**.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Marp CLI
+        run: npm install -g @marp-team/marp-cli
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Generate slide Markdown
+        run: python scripts/generate-slides.py
+
+      - name: Convert Markdown to HTML slides
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for file in docs/slides/src/*.md; do
+            output="docs/slides/$(basename "${file%.md}").html"
+            marp "$file" --html -o "$output"
+          done
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./docs
