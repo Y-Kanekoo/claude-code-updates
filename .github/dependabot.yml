@@ -1,0 +1,38 @@
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "00:30"
+      timezone: Asia/Tokyo
+    groups:
+      github-actions:
+        patterns: ["*"]
+    labels: [dependencies, github-actions]
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "00:45"
+      timezone: Asia/Tokyo
+    groups:
+      python-runtime:
+        patterns: ["*"]
+    labels: [dependencies, python]
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "01:00"
+      timezone: Asia/Tokyo
+    groups:
+      node-tools:
+        patterns: ["*"]
+    labels: [dependencies, node]

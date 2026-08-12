@@ -3,9 +3,14 @@ from __future__ import annotations
 import argparse
 import html
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+
+try:
+    from report_schema import SECTION_TITLES, parse_sections
+except ImportError:  # pragma: no cover - package import時の経路
+    from scripts.report_schema import SECTION_TITLES, parse_sections
 
 
 MARP_FRONT_MATTER = """---
@@ -19,6 +24,8 @@ size: 16:9
 REPORT_NAME_PATTERN = re.compile(
     r"^(?P<date>\d{4}-\d{2}-\d{2})-(?P<version>v[\w.-]+)$"
 )
+MAX_SLIDE_CONTENT_LINES = 20
+CHANGE_CATEGORY_RE = re.compile(r"^###\s+(.+?)\s*$", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -32,19 +39,159 @@ class SlideEntry:
 
 
 def preprocess_for_marp(source: str) -> str:
-    """既存レポートMarkdownをMarp向けMarkdownに変換する。"""
-    processed_lines: list[str] = []
+    """アンカー基準でレポートをMarpスライドへ変換する。
 
+    H2/H3そのものを境界にせず、安定した ``section:`` アンカーを使う。
+    ``変更内容`` はカテゴリごとに分割し、1枚が行数上限を超えないよう
+    箇条書き単位でページ分割する。
+    """
+    if "<!-- section:" not in source:
+        return _preprocess_legacy_headings(source)
+
+    sections = parse_sections(source)
+    title_block = _extract_title_block(source)
+    slide_bodies: list[str] = []
+    if title_block:
+        slide_bodies.extend(_split_to_budget(title_block))
+
+    for section_id in (
+        "links",
+        "summary",
+        "judgement",
+        "highlights",
+        "changes",
+        "breaking_changes",
+        "impact",
+        "recommended_action",
+        "notes",
+    ):
+        body = sections.get(section_id)
+        if not body:
+            continue
+        if section_id == "changes":
+            slide_bodies.extend(_build_change_slides(body))
+            continue
+        heading = SECTION_TITLES[section_id]
+        section_markdown = (
+            f"<!-- section:{section_id} -->\n## {heading}\n\n{body}"
+        ).strip()
+        slide_bodies.extend(_split_to_budget(section_markdown))
+
+    processed = "\n\n---\n\n".join(slide_bodies).rstrip() + "\n"
+    return f"{MARP_FRONT_MATTER}\n{processed}"
+
+
+def _preprocess_legacy_headings(source: str) -> str:
+    """アンカー導入前の入力に対する後方互換前処理。"""
+    processed_lines: list[str] = []
     for line in source.splitlines(keepends=True):
         if line.startswith("### "):
             processed_lines.append("\n---\n\n")
         processed_lines.append(line)
-
     processed = "".join(processed_lines)
     if processed and not processed.endswith("\n"):
         processed += "\n"
-
     return f"{MARP_FRONT_MATTER}\n{processed}"
+
+
+def validate_slide_budget(markdown: str) -> list[str]:
+    """Marp Markdownの各スライドが内容行上限内か検証する。"""
+    body = markdown.removeprefix(MARP_FRONT_MATTER).lstrip("\n")
+    errors: list[str] = []
+    for slide_number, slide in enumerate(body.split("\n---\n"), start=1):
+        content_lines = _content_line_count(slide)
+        if content_lines > MAX_SLIDE_CONTENT_LINES:
+            errors.append(
+                f"スライド{slide_number}が{content_lines}行です。"
+                f"上限は{MAX_SLIDE_CONTENT_LINES}行です。"
+            )
+    return errors
+
+
+def _extract_title_block(source: str) -> str:
+    """最初のアンカー前にあるタイトル・判定表を取り出す。"""
+    first_anchor = source.find("<!-- section:")
+    prefix = source if first_anchor < 0 else source[:first_anchor]
+    return prefix.strip()
+
+
+def _build_change_slides(body: str) -> list[str]:
+    """変更内容をカテゴリごとの独立スライドへ変換する。"""
+    matches = list(CHANGE_CATEGORY_RE.finditer(body))
+    if not matches:
+        return _split_to_budget(
+            f"<!-- section:changes -->\n## 変更内容\n\n{body}".strip()
+        )
+
+    slides: list[str] = []
+    prefix = body[: matches[0].start()].strip()
+    if prefix:
+        slides.extend(
+            _split_to_budget(
+                f"<!-- section:changes -->\n## 変更内容\n\n{prefix}"
+            )
+        )
+    for index, match in enumerate(matches):
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
+        category = match.group(1).strip()
+        category_body = body[match.end() : end].strip()
+        slides.extend(
+            _split_to_budget(
+                (
+                    f"<!-- section:changes -->\n"
+                    f"## 変更内容 — {category}\n\n{category_body}"
+                ).strip()
+            )
+        )
+    return slides
+
+
+def _split_to_budget(markdown: str) -> list[str]:
+    """見出しを複製しながら箇条書きブロック単位で分割する。"""
+    if _content_line_count(markdown) <= MAX_SLIDE_CONTENT_LINES:
+        return [markdown]
+
+    lines = markdown.splitlines()
+    heading = lines[0]
+    body_lines = lines[1:]
+    blocks: list[list[str]] = []
+    current: list[str] = []
+    for line in body_lines:
+        if line.startswith("- ") and current:
+            blocks.append(current)
+            current = [line]
+        else:
+            current.append(line)
+    if current:
+        blocks.append(current)
+
+    slides: list[str] = []
+    current_lines = [heading]
+    for block in blocks:
+        candidate = current_lines + [""] + block
+        if len(current_lines) > 1 and _content_line_count("\n".join(candidate)) > MAX_SLIDE_CONTENT_LINES:
+            slides.append("\n".join(current_lines).strip())
+            current_lines = [heading, "（続き）", "", *block]
+        else:
+            current_lines = candidate
+    if current_lines:
+        slides.append("\n".join(current_lines).strip())
+
+    oversized = [slide for slide in slides if _content_line_count(slide) > MAX_SLIDE_CONTENT_LINES]
+    if oversized:
+        raise ValueError(
+            "単一の箇条書きがスライド行数上限を超えています。"
+            f"上限: {MAX_SLIDE_CONTENT_LINES}行"
+        )
+    return slides
+
+
+def _content_line_count(markdown: str) -> int:
+    return sum(
+        1
+        for line in markdown.splitlines()
+        if line.strip() and not line.strip().startswith("<!--")
+    )
 
 
 def collect_report_files(reports_dir: Path) -> list[Path]:
@@ -138,7 +285,11 @@ def generate_slides(reports_dir: Path, output_dir: Path) -> int:
     for report_path in report_files:
         source = report_path.read_text(encoding="utf-8")
         output_path = output_dir / report_path.name
-        output_path.write_text(preprocess_for_marp(source), encoding="utf-8")
+        processed = preprocess_for_marp(source)
+        budget_errors = validate_slide_budget(processed)
+        if budget_errors:
+            raise ValueError("\n".join(budget_errors))
+        output_path.write_text(processed, encoding="utf-8")
         generated_paths.append(output_path)
 
     index_path = output_dir.parent / "index.html"

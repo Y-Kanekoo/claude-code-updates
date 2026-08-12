@@ -17,6 +17,7 @@ concurrency:
 
 env:
   MAX_RELEASES_PER_RUN: ${{ vars.MAX_RELEASES_PER_RUN || '10' }}
+  CLAUDE_UPDATES_GROQ_MODEL: ${{ vars.CLAUDE_UPDATES_GROQ_MODEL || 'openai/gpt-oss-120b' }}
 
 jobs:
   generate-report:
@@ -25,12 +26,14 @@ jobs:
 
     steps:
       - name: リポジトリをチェックアウト
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          # 待機中に先行runがpushしても、開始時点のブランチ先端を取得する。
+          ref: ${{ github.ref_name }}
 
       - name: Python 3.11 をセットアップ
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -43,13 +46,12 @@ jobs:
         run: python scripts/check-groq-key-expiry.py
 
       - name: 依存パッケージをインストール
-        run: |
-          pip install --upgrade pip
-          pip install -r requirements.txt
+        run: pip install --require-hashes -r requirements.txt
 
       - name: レポートを生成
         env:
           GROQ_API_KEY: ${{ secrets.CLAUDE_UPDATES_GROQ_API_KEY }}
+          CLAUDE_UPDATES_GROQ_MODEL: ${{ env.CLAUDE_UPDATES_GROQ_MODEL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DISCORD_WEBHOOK_URL: ${{ secrets.CLAUDE_UPDATES_DISCORD_WEBHOOK_URL }}
         run: |
@@ -75,45 +77,61 @@ jobs:
         if: always()
         shell: bash
         run: |
-          if [[ -n $(git status --porcelain) ]]; then
+          report_changes=$(git status --porcelain -- reports/claude-code)
+          if [[ -n "$report_changes" ]]; then
             echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            # 新しいレポートのバージョンを取得（最新のファイル名から抽出）
-            shopt -s nullglob
-            report_files=(reports/claude-code/*.md)
-            latest_report=""
-            for report_file in "${report_files[@]}"; do
-              if [[ ${report_file##*/} == "index.md" ]]; then
-                continue
-              fi
-              if [[ -z "$latest_report" || "$report_file" -nt "$latest_report" ]]; then
-                latest_report=$report_file
-              fi
-            done
-            if [[ -n "$latest_report" ]]; then
-              filename=${latest_report##*/}
-              if [[ $filename =~ v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
-                version=${BASH_REMATCH[0]}
-              else
-                version="latest"
-              fi
-              echo "version=$version" >> "$GITHUB_OUTPUT"
-            else
+            version=$(python -c '
+          import json
+          from pathlib import Path
+          path = Path("reports/claude-code/last-checked.json")
+          value = json.loads(path.read_text(encoding="utf-8")).get("last_version", "latest")
+          print(value)
+          ' 2>/dev/null || true)
+            if [[ ! $version =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
               echo "version=latest" >> "$GITHUB_OUTPUT"
+            else
+              echo "version=$version" >> "$GITHUB_OUTPUT"
             fi
           else
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: 変更をコミット＆プッシュ
+        id: commit_reports
         if: >-
           ${{ always() && steps.generate_index.outcome == 'success' &&
           steps.check_changes.outputs.has_changes == 'true' }}
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
+          git add --all -- reports/claude-code
+          if git diff --cached --quiet -- reports/claude-code; then
+            echo "ステージ対象のレポート変更がないため、コミットをスキップします"
+            exit 0
+          fi
           git commit -m "[docs] Claude Code ${{ steps.check_changes.outputs.version }} の更新レポートを追加"
           git push
+
+      - name: スライド更新トリガーを記録
+        if: >-
+          ${{ always() && steps.commit_reports.outcome == 'success' &&
+          steps.check_changes.outputs.has_changes == 'true' }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/slides-trigger"
+          printf '%s\n' "${{ steps.check_changes.outputs.version }}" \
+            > "$RUNNER_TEMP/slides-trigger/version.txt"
+
+      - name: スライド更新トリガーを保存
+        if: >-
+          ${{ always() && steps.commit_reports.outcome == 'success' &&
+          steps.check_changes.outputs.has_changes == 'true' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: slides-trigger
+          path: ${{ runner.temp }}/slides-trigger/version.txt
+          retention-days: 1
+          if-no-files-found: error
 
       - name: 失敗時に Discord へ通知
         if: failure()
