@@ -7,15 +7,22 @@ index.md（人間向け一覧）と index.json（機械処理用）を生成す�
 新旧の両レポートフォーマットに対応している。
 """
 
+import argparse
 import json
+import os
 import re
 import sys
-from datetime import datetime
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
-from report_schema import extract_judgement, extract_summary, parse_sections
+from report_schema import (
+    extract_judgement,
+    extract_summary,
+    parse_sections,
+    validate_canonical_report,
+)
 
 REPORTS_DIR = Path(__file__).parent.parent / "reports" / "claude-code"
 INDEX_MD = REPORTS_DIR / "index.md"
@@ -27,7 +34,7 @@ JUDGEMENT_META_RE = re.compile(
 )
 
 
-def extract_version(content: str) -> Optional[str]:
+def extract_version(content: str) -> str | None:
     """新旧レポート見出しからバージョンを抽出する。"""
     match = re.search(
         r"^(?:##\s+|#\s+Claude Code 更新レポート\s*/\s*)"
@@ -38,7 +45,7 @@ def extract_version(content: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def extract_date(content: str) -> Optional[str]:
+def extract_date(content: str) -> str | None:
     """リリース日を抽出（新旧2種類のフォーマットに対応）"""
     # 新フォーマット: - **リリース日**: YYYY-MM-DD
     match = re.search(r"\*\*リリース日\*\*[：:]\s*(\d{4}-\d{2}-\d{2})", content)
@@ -128,17 +135,29 @@ def _format_table_row(release: dict[str, str]) -> str:
     )
 
 
-def parse_report(path: Path) -> Optional[dict[str, str]]:
+class IndexGenerationError(RuntimeError):
+    """レポート集合から安全に索引を生成できない。"""
+
+
+def parse_report(
+    path: Path, *, canonical: bool = False
+) -> dict[str, str] | None:
     """レポートファイルを解析してメタデータ辞書を返す"""
     try:
         content = path.read_text(encoding="utf-8")
-    except IOError as e:
+    except OSError as e:
         print(f"警告: {path.name} の読み込みに失敗しました: {e}")
         return None
 
     version = extract_version(content)
     if not version:
         return None
+
+    if canonical:
+        errors = validate_canonical_report(content, filename=path.name)
+        if errors:
+            joined = "\n".join(f"- {error}" for error in errors)
+            raise IndexGenerationError(f"{path.name} の検証に失敗しました。\n{joined}")
 
     sections = parse_sections(content)
     judgement = _extract_judgement_with_fallback(sections, version)
@@ -154,19 +173,54 @@ def parse_report(path: Path) -> Optional[dict[str, str]]:
     }
 
 
-def generate_index() -> None:
-    """index.md と index.json を生成"""
+def _collect_releases() -> list[dict[str, str]]:
+    """全レポートをfail-closedで解析し、semver降順に返す。"""
     # 除外ファイルを除く .md ファイルを収集し、ファイル名降順（新しい順）でソート
     report_files = sorted(
         (f for f in REPORTS_DIR.glob("*.md") if f.name not in EXCLUDE_FILES),
         reverse=True,
     )
 
-    releases = [r for f in report_files if (r := parse_report(f)) is not None]
+    releases: list[dict[str, str]] = []
+    failures: list[str] = []
+    for report_file in report_files:
+        try:
+            release = parse_report(report_file, canonical=True)
+        except IndexGenerationError as error:
+            failures.append(str(error))
+            continue
+        if release is None:
+            failures.append(f"{report_file.name}: バージョンを抽出できません。")
+            continue
+        releases.append(release)
 
-    now = datetime.now()
-    generated_at = now.isoformat(timespec="seconds")
-    today = now.strftime("%Y-%m-%d")
+    if failures:
+        joined = "\n".join(f"- {failure}" for failure in failures)
+        raise IndexGenerationError(f"索引対象レポートの解析に失敗しました。\n{joined}")
+
+    versions = [release["version"] for release in releases]
+    duplicate_versions = sorted(
+        version for version in set(versions) if versions.count(version) > 1
+    )
+    if duplicate_versions:
+        raise IndexGenerationError(
+            "バージョンが重複しています: " + ", ".join(duplicate_versions)
+        )
+
+    releases.sort(key=lambda release: _version_tuple(release["version"]), reverse=True)
+    return releases
+
+
+def _render_index_contents(
+    releases: list[dict[str, str]], generated_at: str
+) -> tuple[str, str]:
+    """索引2形式を同じ入力からメモリ上で構築する。"""
+    try:
+        generated_datetime = datetime.fromisoformat(generated_at)
+    except ValueError as error:
+        raise IndexGenerationError(f"generated_atがISO形式ではありません: {generated_at}") from error
+
+    today = generated_datetime.strftime("%Y-%m-%d")
 
     # --- index.md の生成 ---
     latest = releases[0] if releases else None
@@ -197,20 +251,109 @@ def generate_index() -> None:
 {table_rows}
 """
 
-    INDEX_MD.write_text(index_md_content, encoding="utf-8")
-    print(f"index.md を生成しました ({len(releases)} 件): {INDEX_MD}")
-
-    # --- index.json の生成 ---
     index_data = {
         "generated_at": generated_at,
         "releases": releases,
     }
-    INDEX_JSON.write_text(
-        json.dumps(index_data, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
+    index_json_content = json.dumps(index_data, ensure_ascii=False, indent=2) + "\n"
+    return index_md_content, index_json_content
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """同一ディレクトリの一時ファイルを置換して途中書き込みを防ぐ。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_file.write(content)
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+            temporary_path = Path(temporary_file.name)
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None and temporary_path.exists():
+            temporary_path.unlink()
+
+
+def _existing_generated_at() -> str:
+    """--check用に既存JSONの生成時刻を再利用する。"""
+    try:
+        data = json.loads(INDEX_JSON.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise IndexGenerationError(f"既存index.jsonを読み込めません: {error}") from error
+    generated_at = data.get("generated_at")
+    if not isinstance(generated_at, str):
+        raise IndexGenerationError("既存index.jsonにgenerated_at文字列がありません。")
+    return generated_at
+
+
+def generate_index(*, check: bool = False) -> bool:
+    """index.md と index.json を生成、または既存内容との一致を検査する。"""
+    releases = _collect_releases()
+    generated_at = (
+        _existing_generated_at()
+        if check
+        else datetime.now(timezone.utc).isoformat(timespec="seconds")
     )
+    index_md_content, index_json_content = _render_index_contents(
+        releases, generated_at
+    )
+
+    if check:
+        mismatches: list[str] = []
+        for path, expected in (
+            (INDEX_MD, index_md_content),
+            (INDEX_JSON, index_json_content),
+        ):
+            try:
+                actual = path.read_text(encoding="utf-8")
+            except OSError:
+                actual = ""
+            if actual != expected:
+                mismatches.append(path.name)
+        if mismatches:
+            print(
+                "索引が最新ではありません: " + ", ".join(mismatches),
+                file=sys.stderr,
+            )
+            return False
+        print(f"索引整合性を確認しました ({len(releases)} 件)")
+        return True
+
+    _atomic_write_text(INDEX_MD, index_md_content)
+    _atomic_write_text(INDEX_JSON, index_json_content)
+    print(f"index.md を生成しました ({len(releases)} 件): {INDEX_MD}")
     print(f"index.json を生成しました: {INDEX_JSON}")
+    return True
+
+
+def parse_args() -> argparse.Namespace:
+    """CLI引数を解析する。"""
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="索引を書き換えず、全レポートとの一致を検査する",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    """CLIエントリーポイント。"""
+    args = parse_args()
+    try:
+        return 0 if generate_index(check=args.check) else 1
+    except IndexGenerationError as error:
+        print(f"エラー: {error}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
-    generate_index()
+    raise SystemExit(main())

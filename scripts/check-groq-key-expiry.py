@@ -5,17 +5,24 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from datetime import date, datetime, timezone
 from urllib import error, request
+from urllib.parse import urlsplit
 
 EXPIRY_ENV_NAME = "CLAUDE_UPDATES_GROQ_API_KEY_EXPIRES_AT"
 WEBHOOK_ENV_NAME = "DISCORD_WEBHOOK_URL"
 NOTIFICATION_DAYS = frozenset({14, 7, 1, 0})
+EXPIRY_DATE_PATTERN = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
 
 
 def parse_expiry_date(value: str) -> date:
     """YYYY-MM-DD 形式の期限日を返す。"""
+    if not EXPIRY_DATE_PATTERN.fullmatch(value):
+        raise ValueError(
+            f"{EXPIRY_ENV_NAME} は YYYY-MM-DD 形式で設定してください: {value!r}"
+        )
     try:
         return date.fromisoformat(value)
     except ValueError as exc:
@@ -55,20 +62,32 @@ def build_message(expiry_date: date, days_remaining: int, actions_run_url: str) 
 def send_discord_notification(webhook_url: str, message: str) -> None:
     """Discord Webhook へ通知する。"""
     payload = json.dumps({"content": message}).encode("utf-8")
-    webhook_request = request.Request(
-        webhook_url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
     try:
+        parsed = urlsplit(webhook_url)
+        port = parsed.port
+        if (
+            parsed.scheme != "https"
+            or not parsed.hostname
+            or parsed.username
+            or parsed.password
+            or (port is not None and not 1 <= port <= 65535)
+        ):
+            raise ValueError("有効な HTTPS URL ではありません")
+        webhook_request = request.Request(
+            webhook_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         with request.urlopen(webhook_request, timeout=15) as response:
             if response.status >= 300:
                 raise RuntimeError(
                     f"Discord 通知に失敗しました: HTTP {response.status}"
                 )
-    except (error.URLError, TimeoutError) as exc:
-        raise RuntimeError(f"Discord 通知に失敗しました: {exc}") from exc
+    except (error.URLError, TimeoutError, ValueError) as exc:
+        raise RuntimeError(
+            f"Discord 通知に失敗しました: {type(exc).__name__}"
+        ) from exc
 
 
 def main() -> int:
