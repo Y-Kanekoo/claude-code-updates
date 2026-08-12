@@ -51,7 +51,7 @@ except ModuleNotFoundError:
 GITHUB_API_URL = "https://api.github.com/repos/anthropics/claude-code/releases"
 REPORTS_DIR = Path(__file__).parent.parent / "reports" / "claude-code"
 LAST_CHECKED_FILE = REPORTS_DIR / "last-checked.json"
-LLM_MODEL = "llama-3.3-70b-versatile"
+LLM_MODEL = "openai/gpt-oss-120b"
 DEFAULT_MAX_RELEASES_PER_RUN = 10
 GITHUB_RELEASES_PER_PAGE = 100
 GITHUB_RELEASES_MAX_PAGES = 10
@@ -83,6 +83,10 @@ T = TypeVar("T")
 
 class GroqAuthenticationError(RuntimeError):
     """Groq APIキーの認証・認可失敗を表す例外。"""
+
+
+class GroqModelUnavailableError(RuntimeError):
+    """設定したGroqモデルが利用できないことを表す例外。"""
 
 
 class ReleaseChecker:
@@ -284,13 +288,23 @@ class ReleaseChecker:
         return selected_releases
 
     def validate_groq_authentication(self) -> None:
-        """リリース処理前にGroq APIキーが利用可能か確認する。"""
-        print("Groq APIの認証状態を確認中...")
-        self._call_groq_api(
+        """リリース処理前にGroq APIキーと利用モデルを確認する。"""
+        print("Groq APIの認証状態と利用モデルを確認中...")
+        models = self._call_groq_api(
             lambda: self.client.models.list(),
             "認証確認",
         )
-        print("Groq APIの認証を確認しました")
+        model_data = getattr(models, "data", None)
+        if model_data is not None:
+            available_model_ids = {
+                model.id for model in model_data if getattr(model, "id", None)
+            }
+            if LLM_MODEL not in available_model_ids:
+                raise GroqModelUnavailableError(
+                    f"Groqモデル {LLM_MODEL} を利用できません。"
+                    "モデル設定またはGroqのModel Permissionsを確認してください"
+                )
+        print(f"Groq APIの認証とモデル {LLM_MODEL} を確認しました")
 
     def _call_groq_api(
         self,
@@ -969,6 +983,9 @@ Few-shot例:
             # 前回チェックしたバージョンを取得
             last_version = self.get_last_checked_version()
 
+            # 更新の有無にかかわらず、APIキーと利用モデルを日次確認
+            self.validate_groq_authentication()
+
             # リリース一覧を取得
             releases = self.fetch_releases(last_version)
 
@@ -982,9 +999,6 @@ Few-shot例:
             if not new_releases:
                 print("処理を終了します")
                 return
-
-            # APIキー不備で途中成果物が発生しないよう、処理前に認証を確認
-            self.validate_groq_authentication()
 
             # 各リリースを古い順に、設定した上限まで処理
             releases_to_process = self.select_releases_for_run(new_releases)
