@@ -58,7 +58,16 @@ jobs:
       - name: インデックスを更新
         id: generate_index
         if: always()
+        shell: bash
         run: |
+          report_changes=$(git status --porcelain -- \
+            reports/claude-code \
+            ':(exclude)reports/claude-code/index.md' \
+            ':(exclude)reports/claude-code/index.json')
+          if [[ -z "$report_changes" ]]; then
+            echo "レポートの変更がないため、インデックス更新をスキップします"
+            exit 0
+          fi
           python scripts/generate-index.py
 
       - name: 変更を確認
