@@ -28,8 +28,13 @@ JUDGEMENT_META_RE = re.compile(
 
 
 def extract_version(content: str) -> Optional[str]:
-    """## vX.X.X または ## vX.X.X (date) 形式からバージョンを抽出"""
-    match = re.search(r"^## (v[\d.]+)", content, re.MULTILINE)
+    """新旧レポート見出しからバージョンを抽出する。"""
+    match = re.search(
+        r"^(?:##\s+|#\s+Claude Code 更新レポート\s*/\s*)"
+        r"(v\d+(?:\.\d+)+)(?:\s|$)",
+        content,
+        re.MULTILINE,
+    )
     return match.group(1) if match else None
 
 

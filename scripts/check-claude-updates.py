@@ -7,17 +7,22 @@ GitHub APIでanthropics/claude-codeのリリースを監視し、
 """
 
 import json
+import math
 import os
+import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Mapping, Optional
+from typing import Callable, Dict, List, Mapping, Optional, TypeVar
 
 import requests
 
 try:
+    import groq as groq_sdk
     from groq import Groq
 except ModuleNotFoundError:
+    groq_sdk = None
     Groq = None
 
 try:
@@ -47,6 +52,13 @@ GITHUB_API_URL = "https://api.github.com/repos/anthropics/claude-code/releases"
 REPORTS_DIR = Path(__file__).parent.parent / "reports" / "claude-code"
 LAST_CHECKED_FILE = REPORTS_DIR / "last-checked.json"
 LLM_MODEL = "llama-3.3-70b-versatile"
+DEFAULT_MAX_RELEASES_PER_RUN = 10
+GITHUB_RELEASES_PER_PAGE = 100
+GITHUB_RELEASES_MAX_PAGES = 10
+GROQ_MAX_ATTEMPTS = 3
+GROQ_RETRY_BASE_DELAY_SECONDS = 1.0
+GROQ_RETRY_BUFFER_SECONDS = 0.5
+GROQ_MAX_RETRY_DELAY_SECONDS = 60.0
 SECTION_FIELDS = [
     ("judgement", "📊 判定", True, False),
     ("links", "🔗 リンク", True, False),
@@ -66,6 +78,11 @@ EMPTY_RELEASE_BANNER = (
     "> ℹ️ このリリースは公開情報の変更が原文に記載されていません。"
     "内部リリースの可能性があります。"
 )
+T = TypeVar("T")
+
+
+class GroqAuthenticationError(RuntimeError):
+    """Groq APIキーの認証・認可失敗を表す例外。"""
 
 
 class ReleaseChecker:
@@ -73,6 +90,7 @@ class ReleaseChecker:
 
     def __init__(self):
         """初期化処理"""
+        self.max_releases_per_run = self._read_max_releases_per_run()
         self.groq_api_key = os.getenv("GROQ_API_KEY")
         if not self.groq_api_key:
             raise ValueError("環境変数 GROQ_API_KEY が設定されていません")
@@ -80,7 +98,7 @@ class ReleaseChecker:
             raise ImportError("groq パッケージがインストールされていません")
 
         # Groq APIの設定
-        self.client = Groq(api_key=self.groq_api_key)
+        self.client = Groq(api_key=self.groq_api_key, max_retries=0)
 
         # GitHub APIトークン（任意）
         self.github_token = os.getenv("GITHUB_TOKEN")
@@ -93,6 +111,26 @@ class ReleaseChecker:
 
         # reportsディレクトリが存在しない場合は作成
         REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _read_max_releases_per_run() -> int:
+        """1実行で処理する最大リリース数を環境変数から取得する。"""
+        raw_value = os.getenv(
+            "MAX_RELEASES_PER_RUN",
+            str(DEFAULT_MAX_RELEASES_PER_RUN),
+        )
+        try:
+            max_releases = int(raw_value)
+        except ValueError as e:
+            raise ValueError(
+                "環境変数 MAX_RELEASES_PER_RUN は正の整数で指定してください"
+            ) from e
+
+        if max_releases <= 0:
+            raise ValueError(
+                "環境変数 MAX_RELEASES_PER_RUN は正の整数で指定してください"
+            )
+        return max_releases
 
     def get_last_checked_version(self) -> Optional[str]:
         """前回チェックしたバージョンを取得"""
@@ -126,8 +164,11 @@ class ReleaseChecker:
             print(f"エラー: チェック記録の保存に失敗しました: {e}")
             raise
 
-    def fetch_releases(self) -> List[Dict]:
-        """GitHub APIからリリース一覧を取得"""
+    def fetch_releases(
+        self,
+        last_version: Optional[str] = None,
+    ) -> List[Dict]:
+        """前回バージョンに到達するまでGitHub APIからリリース一覧を取得する。"""
         print("GitHub APIからリリース情報を取得中...")
 
         headers = {"Accept": "application/vnd.github.v3+json"}
@@ -135,15 +176,60 @@ class ReleaseChecker:
             headers["Authorization"] = f"Bearer {self.github_token}"
             print("GitHub認証済みリクエストを使用します")
 
-        try:
-            response = requests.get(
-                GITHUB_API_URL,
-                headers=headers,
-                timeout=30
-            )
-            response.raise_for_status()
+        releases: List[Dict] = []
+        reached_last_version = False
 
-            releases = response.json()
+        try:
+            for page in range(1, GITHUB_RELEASES_MAX_PAGES + 1):
+                response = requests.get(
+                    GITHUB_API_URL,
+                    headers=headers,
+                    params={
+                        "per_page": GITHUB_RELEASES_PER_PAGE,
+                        "page": page,
+                    },
+                    timeout=30,
+                )
+                response.raise_for_status()
+
+                page_releases = response.json()
+                if not isinstance(page_releases, list):
+                    raise ValueError(
+                        "GitHub APIのリリースレスポンスが配列ではありません"
+                    )
+
+                releases.extend(page_releases)
+                reached_last_version = bool(
+                    last_version
+                    and any(
+                        isinstance(release, dict)
+                        and release.get("tag_name") == last_version
+                        for release in page_releases
+                    )
+                )
+
+                # 初回実行は最新1件のみ使うため、最初のページで十分
+                if not last_version or reached_last_version:
+                    break
+
+                # 100件未満なら最終ページまで取得済み
+                if len(page_releases) < GITHUB_RELEASES_PER_PAGE:
+                    break
+            else:
+                raise RuntimeError(
+                    "GitHub APIのページ取得上限 "
+                    f"{GITHUB_RELEASES_MAX_PAGES} ページに達しましたが、"
+                    f"前回バージョン {last_version} が見つかりませんでした。"
+                    "リリースの取りこぼしを防ぐため処理を停止します"
+                )
+
+            if last_version and not reached_last_version:
+                raise RuntimeError(
+                    "GitHub APIの全リリースを取得しましたが、"
+                    f"前回バージョン {last_version} が見つかりませんでした。"
+                    "リリースの重複処理を防ぐため処理を停止します"
+                )
+
             print(f"{len(releases)} 件のリリースを取得しました")
             return releases
 
@@ -179,6 +265,198 @@ class ReleaseChecker:
             print("新規リリースは見つかりませんでした")
 
         return new_releases
+
+    def select_releases_for_run(
+        self,
+        new_releases: List[Dict],
+    ) -> List[Dict]:
+        """新規リリースを古い順に並べ、今回の処理上限まで選択する。"""
+        ordered_releases = list(reversed(new_releases))
+        selected_releases = ordered_releases[:self.max_releases_per_run]
+        remaining_count = len(ordered_releases) - len(selected_releases)
+
+        if remaining_count:
+            print(
+                f"1実行の処理上限 {self.max_releases_per_run} 件を適用します。"
+                f"残り {remaining_count} 件は次回へ繰り越します"
+            )
+
+        return selected_releases
+
+    def validate_groq_authentication(self) -> None:
+        """リリース処理前にGroq APIキーが利用可能か確認する。"""
+        print("Groq APIの認証状態を確認中...")
+        self._call_groq_api(
+            lambda: self.client.models.list(),
+            "認証確認",
+        )
+        print("Groq APIの認証を確認しました")
+
+    def _call_groq_api(
+        self,
+        operation: Callable[[], T],
+        operation_name: str,
+    ) -> T:
+        """再試行対象を接続障害・429・5xxに限定してGroq APIを呼ぶ。"""
+        for attempt in range(1, GROQ_MAX_ATTEMPTS + 1):
+            try:
+                return operation()
+            except Exception as e:
+                status_code = self._extract_status_code(e)
+                if status_code in (401, 403):
+                    if status_code == 401:
+                        detail = "APIキーが無効または期限切れです"
+                    else:
+                        detail = "APIキーに必要な権限がありません"
+                    raise GroqAuthenticationError(
+                        f"Groq APIの認証に失敗しました（HTTP {status_code}）。"
+                        f"{detail}。環境変数 GROQ_API_KEY を確認してください"
+                    ) from e
+
+                retryable = (
+                    status_code == 429
+                    or (status_code is not None and 500 <= status_code <= 599)
+                    or self._is_groq_connection_error(e)
+                )
+                if not retryable or attempt == GROQ_MAX_ATTEMPTS:
+                    raise
+
+                delay_seconds = GROQ_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+                if status_code == 429:
+                    server_delay = self._extract_retry_delay_seconds(e)
+                    if server_delay is not None:
+                        delay_seconds = min(
+                            max(delay_seconds, server_delay)
+                            + GROQ_RETRY_BUFFER_SECONDS,
+                            GROQ_MAX_RETRY_DELAY_SECONDS,
+                        )
+                reason = (
+                    f"HTTP {status_code}"
+                    if status_code is not None
+                    else "接続障害"
+                )
+                print(
+                    f"警告: Groq APIの{operation_name}で{reason}が発生しました。"
+                    f"{delay_seconds:g}秒後に再試行します "
+                    f"({attempt}/{GROQ_MAX_ATTEMPTS - 1})"
+                )
+                time.sleep(delay_seconds)
+
+        raise RuntimeError("Groq API呼び出しが予期せず終了しました")
+
+    @classmethod
+    def _extract_retry_delay_seconds(cls, error: Exception) -> Optional[float]:
+        """Groqの429応答から推奨待機秒数を安全に取得する。"""
+        response = getattr(error, "response", None)
+        raw_headers = getattr(response, "headers", None)
+        headers: Dict[str, object] = {}
+        if raw_headers is not None:
+            try:
+                headers = {
+                    str(name).lower(): value
+                    for name, value in raw_headers.items()
+                }
+            except (AttributeError, TypeError, ValueError):
+                headers = {}
+
+        delays: List[float] = []
+        retry_after_ms = cls._parse_non_negative_number(
+            headers.get("retry-after-ms")
+        )
+        if retry_after_ms is not None:
+            delays.append(retry_after_ms / 1000)
+
+        retry_after = cls._parse_non_negative_number(
+            headers.get("retry-after")
+        )
+        if retry_after is not None:
+            delays.append(retry_after)
+
+        token_reset = cls._parse_duration_seconds(
+            headers.get("x-ratelimit-reset-tokens")
+        )
+        if token_reset is not None:
+            delays.append(token_reset)
+
+        if delays:
+            return max(delays)
+
+        match = re.search(
+            r"try\s+again\s+in\s+(\d+(?:\.\d+)?)s\b",
+            str(error),
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return None
+        return cls._parse_non_negative_number(match.group(1))
+
+    @staticmethod
+    def _parse_non_negative_number(value: object) -> Optional[float]:
+        """有限の非負数だけをfloatとして返す。"""
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            number = float(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(number) or number < 0:
+            return None
+        return number
+
+    @classmethod
+    def _parse_duration_seconds(cls, value: object) -> Optional[float]:
+        """`6.13s` や `2m59.56s` 形式を秒へ変換する。"""
+        if value is None:
+            return None
+        raw_value = str(value).strip().lower()
+
+        milliseconds_match = re.fullmatch(r"(\d+(?:\.\d+)?)ms", raw_value)
+        if milliseconds_match:
+            milliseconds = cls._parse_non_negative_number(
+                milliseconds_match.group(1)
+            )
+            return None if milliseconds is None else milliseconds / 1000
+
+        duration_match = re.fullmatch(
+            r"(?:(\d+(?:\.\d+)?)h)?"
+            r"(?:(\d+(?:\.\d+)?)m)?"
+            r"(?:(\d+(?:\.\d+)?)s)?",
+            raw_value,
+        )
+        if not duration_match or not any(duration_match.groups()):
+            return None
+
+        hours, minutes, seconds = (
+            cls._parse_non_negative_number(part) if part is not None else 0.0
+            for part in duration_match.groups()
+        )
+        if hours is None or minutes is None or seconds is None:
+            return None
+        return hours * 3600 + minutes * 60 + seconds
+
+    @staticmethod
+    def _extract_status_code(error: Exception) -> Optional[int]:
+        """Groq SDK例外からHTTPステータスコードを取得する。"""
+        status_code = getattr(error, "status_code", None)
+        if isinstance(status_code, int):
+            return status_code
+
+        response = getattr(error, "response", None)
+        response_status_code = getattr(response, "status_code", None)
+        if isinstance(response_status_code, int):
+            return response_status_code
+        return None
+
+    @staticmethod
+    def _is_groq_connection_error(error: Exception) -> bool:
+        """Groq SDKの接続例外かを判定する。"""
+        if groq_sdk is None:
+            return False
+        connection_error_type = getattr(groq_sdk, "APIConnectionError", None)
+        return (
+            isinstance(connection_error_type, type)
+            and isinstance(error, connection_error_type)
+        )
 
     def summarize_release_notes(self, release_notes: str, version: str) -> str:
         """Groq APIでリリースノートを日本語要約"""
@@ -356,10 +634,13 @@ Few-shot例:
 """
 
         try:
-            response = self.client.chat.completions.create(
-                model=LLM_MODEL,
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.2,
+            response = self._call_groq_api(
+                lambda: self.client.chat.completions.create(
+                    model=LLM_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    temperature=0.2,
+                ),
+                f"{version} の要約",
             )
             summary = response.choices[0].message.content.strip()
             print(f"要約完了: {version}")
@@ -689,7 +970,7 @@ Few-shot例:
             last_version = self.get_last_checked_version()
 
             # リリース一覧を取得
-            releases = self.fetch_releases()
+            releases = self.fetch_releases(last_version)
 
             if not releases:
                 print("リリースが見つかりませんでした")
@@ -702,13 +983,14 @@ Few-shot例:
                 print("処理を終了します")
                 return
 
-            # 各リリースを処理（古い順に処理）
-            new_releases.reverse()
-            latest_version = None
-            latest_date = None
+            # APIキー不備で途中成果物が発生しないよう、処理前に認証を確認
+            self.validate_groq_authentication()
+
+            # 各リリースを古い順に、設定した上限まで処理
+            releases_to_process = self.select_releases_for_run(new_releases)
             prev_version = last_version  # compare URL用に前バージョンを追跡
 
-            for release in new_releases:
+            for release in releases_to_process:
                 version = release.get("tag_name", "unknown")
                 release_notes = release.get("body", "リリースノートがありません")
 
@@ -724,16 +1006,12 @@ Few-shot例:
                 # Discord通知を送信
                 self.send_discord_notification(release, summary)
 
-                latest_version = version
-                latest_date = date_str
+                # 後続リリースが失敗しても部分進捗を保持できるよう都度保存
+                self.save_last_checked_version(version, date_str)
                 prev_version = version  # 次のリリースのprev_versionとして使用
 
-            # 最新バージョンを保存
-            if latest_version:
-                self.save_last_checked_version(latest_version, latest_date)
-
             print("=" * 60)
-            print(f"処理完了: {len(new_releases)} 件のレポートを作成しました")
+            print(f"処理完了: {len(releases_to_process)} 件のレポートを作成しました")
             print("=" * 60)
 
         except Exception as e:

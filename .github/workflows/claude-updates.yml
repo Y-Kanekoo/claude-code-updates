@@ -11,24 +11,36 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: claude-updates-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  MAX_RELEASES_PER_RUN: ${{ vars.MAX_RELEASES_PER_RUN || '10' }}
 
 jobs:
   generate-report:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: リポジトリをチェックアウト
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Python 3.11 をセットアップ
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: '3.11'
           cache: 'pip'
+
+      - name: Groq API キーの期限を確認
+        env:
+          CLAUDE_UPDATES_GROQ_API_KEY_EXPIRES_AT: ${{ vars.CLAUDE_UPDATES_GROQ_API_KEY_EXPIRES_AT }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.CLAUDE_UPDATES_DISCORD_WEBHOOK_URL }}
+          ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: python scripts/check-groq-key-expiry.py
 
       - name: 依存パッケージをインストール
         run: |
@@ -44,28 +56,58 @@ jobs:
           python scripts/check-claude-updates.py
 
       - name: インデックスを更新
+        id: generate_index
+        if: always()
+        shell: bash
         run: |
+          report_changes=$(git status --porcelain -- \
+            reports/claude-code \
+            ':(exclude)reports/claude-code/index.md' \
+            ':(exclude)reports/claude-code/index.json')
+          if [[ -z "$report_changes" ]]; then
+            echo "レポートの変更がないため、インデックス更新をスキップします"
+            exit 0
+          fi
           python scripts/generate-index.py
 
       - name: 変更を確認
         id: check_changes
+        if: always()
+        shell: bash
         run: |
           if [[ -n $(git status --porcelain) ]]; then
-            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
             # 新しいレポートのバージョンを取得（最新のファイル名から抽出）
-            latest_report=$(ls -t reports/claude-code/*.md 2>/dev/null | grep -v index.md | head -n 1)
+            shopt -s nullglob
+            report_files=(reports/claude-code/*.md)
+            latest_report=""
+            for report_file in "${report_files[@]}"; do
+              if [[ ${report_file##*/} == "index.md" ]]; then
+                continue
+              fi
+              if [[ -z "$latest_report" || "$report_file" -nt "$latest_report" ]]; then
+                latest_report=$report_file
+              fi
+            done
             if [[ -n "$latest_report" ]]; then
-              version=$(basename "$latest_report" | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' || echo "latest")
-              echo "version=$version" >> $GITHUB_OUTPUT
+              filename=${latest_report##*/}
+              if [[ $filename =~ v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+                version=${BASH_REMATCH[0]}
+              else
+                version="latest"
+              fi
+              echo "version=$version" >> "$GITHUB_OUTPUT"
             else
-              echo "version=latest" >> $GITHUB_OUTPUT
+              echo "version=latest" >> "$GITHUB_OUTPUT"
             fi
           else
-            echo "has_changes=false" >> $GITHUB_OUTPUT
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: 変更をコミット＆プッシュ
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: >-
+          ${{ always() && steps.generate_index.outcome == 'success' &&
+          steps.check_changes.outputs.has_changes == 'true' }}
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
