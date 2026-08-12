@@ -17,45 +17,74 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: read
   contents: write
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    # workflow_run トリガー時は元のワークフローが成功した場合のみ実行
-    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    # 元ワークフローが途中失敗しても、部分進捗をpushできた場合は公開する。
+    # 実際の更新有無はslides-trigger artifactで判定する。
 
     steps:
+      - name: レポート更新の有無を確認
+        id: report_update
+        if: ${{ github.event_name == 'workflow_run' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UPSTREAM_RUN_ID: ${{ github.event.workflow_run.id }}
+        shell: bash
+        run: |
+          count=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${UPSTREAM_RUN_ID}/artifacts" \
+            --jq '[.artifacts[] | select(.name == "slides-trigger" and .expired == false)] | length')
+          if [[ $count -gt 0 ]]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "レポート変更がないためスライド公開をスキップします"
+          fi
+
       - name: Checkout
-        uses: actions/checkout@v7
+        if: ${{ github.event_name != 'workflow_run' || steps.report_update.outputs.should_publish == 'true' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        if: ${{ github.event_name != 'workflow_run' || steps.report_update.outputs.should_publish == 'true' }}
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
+          cache: npm
 
       - name: Install Marp CLI
-        run: npm install -g @marp-team/marp-cli
+        if: ${{ github.event_name != 'workflow_run' || steps.report_update.outputs.should_publish == 'true' }}
+        run: npm ci
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        if: ${{ github.event_name != 'workflow_run' || steps.report_update.outputs.should_publish == 'true' }}
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.11"
 
       - name: Generate slide Markdown
+        if: ${{ github.event_name != 'workflow_run' || steps.report_update.outputs.should_publish == 'true' }}
         run: python scripts/generate-slides.py
 
       - name: Convert Markdown to HTML slides
+        if: ${{ github.event_name != 'workflow_run' || steps.report_update.outputs.should_publish == 'true' }}
         shell: bash
         run: |
           shopt -s nullglob
           for file in docs/slides/src/*.md; do
             output="docs/slides/$(basename "${file%.md}").html"
-            marp "$file" --html -o "$output"
+            npm exec -- marp "$file" --html -o "$output"
           done
 
       - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+        if: ${{ github.event_name != 'workflow_run' || steps.report_update.outputs.should_publish == 'true' }}
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages

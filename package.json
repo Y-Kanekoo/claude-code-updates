@@ -1,0 +1,10 @@
+{
+  "name": "claude-code-updates",
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@marp-team/marp-cli": "4.5.0"
+  }
+}

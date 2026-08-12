@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Python・Workflow・lock検証
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Python 3.11 をセットアップ
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Python依存関係を再現
+        run: pip install --require-hashes -r requirements-dev.txt
+
+      - name: Pythonテスト
+        run: pytest -q
+
+      - name: Ruff
+        run: ruff check --select E7,E9,F scripts
+
+      - name: インデックスの再生成差分を検査
+        run: python scripts/generate-index.py --check
+
+      - name: Python lockを検査
+        run: |
+          pip check
+          pip install --dry-run --require-hashes -r requirements.txt
+          pip install --dry-run --require-hashes -r requirements-dev.txt
+
+      - name: actionlintを取得
+        shell: bash
+        run: |
+          archive=actionlint_1.7.12_linux_amd64.tar.gz
+          curl --fail --silent --show-error --location \
+            "https://github.com/rhysd/actionlint/releases/download/v1.7.12/${archive}" \
+            --output "$RUNNER_TEMP/$archive"
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/$archive" \
+            | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
+
+      - name: GitHub Actions構文検査
+        run: |
+          "$RUNNER_TEMP/actionlint"
+
+      - name: Node.js 24 をセットアップ
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Node依存関係を再現
+        run: npm ci
+
+      - name: Marp lockを検査
+        run: npm exec -- marp --version

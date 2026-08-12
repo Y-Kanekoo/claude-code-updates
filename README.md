@@ -35,6 +35,7 @@ GitHub リポジトリの **Settings → Secrets and variables → Actions** に
 |---|---|---|---|
 | `MAX_RELEASES_PER_RUN` | 任意 | `10` | 1回の実行で処理するリリース数の上限 |
 | `CLAUDE_UPDATES_GROQ_API_KEY_EXPIRES_AT` | 推奨 | `YYYY-MM-DD` | Groq API キーの有効期限通知 |
+| `CLAUDE_UPDATES_GROQ_MODEL` | 任意 | `openai/gpt-oss-120b` | Strict Structured Outputs対応の `openai/gpt-oss-120b` / `openai/gpt-oss-20b`。切替前にModel Permissionsを確認 |
 
 ### Groq API キーの取得
 
@@ -45,6 +46,14 @@ GitHub リポジトリの **Settings → Secrets and variables → Actions** に
 5. 失敗していたワークフローを再実行し、成功を確認
 
 キー期限の14日前・7日前・1日前・当日、および期限切れ後の日次実行で Discord に通知されます。通知を受けたら期限前にキーを再発行し、Secret と期限変数を必ずセットで更新してください。期限通知を利用する場合は `CLAUDE_UPDATES_DISCORD_WEBHOOK_URL` の登録も必要です。
+
+### 依存関係とCIの運用
+
+- Pythonの直接依存は `requirements.in` / `requirements-dev.in`、ハッシュ付きlockは `requirements.txt` / `requirements-dev.txt` で管理します。更新時はPython 3.11向けにlockを再生成し、CIのhash検証を通してください。
+- Marp CLIは `package-lock.json` に固定し、ローカル・Actionsとも `npm ci` で再現します。
+- GitHub Actionsは完全なcommit SHAへ固定し、同じ行のバージョンコメントをDependabotが更新します。
+- `CI / Python・Workflow・lock検証` をmainの必須checkにする場合、レポート更新ワークフローの `github-actions[bot]` にRuleset bypassを許可するか、レポート更新自体をPR作成方式へ移行してください。現在はbotによるmainへの直接pushとの互換性を維持しています。
+- Ruffは既存違反を一括変更しないため、CIでは重大な構文・未定義名に絞って `E7,E9,F` を検査します。全rule適用は既存違反を目的別に解消した後の別段階とします。
 
 ## 使用技術
 
