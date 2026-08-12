@@ -29,11 +29,22 @@ GitHub リポジトリの **Settings → Secrets and variables → Actions** に
 | `CLAUDE_UPDATES_GROQ_API_KEY` | ✅ | Groq API（LLaMA 3.3 70B）でリリースノートを日本語要約 |
 | `CLAUDE_UPDATES_DISCORD_WEBHOOK_URL` | 任意 | 新リリース・失敗時の Discord 通知 |
 
+**Repository variables** には以下を登録してください。
+
+| 変数名 | 必須 | 既定値・形式 | 用途 |
+|---|---|---|---|
+| `MAX_RELEASES_PER_RUN` | 任意 | `10` | 1回の実行で処理するリリース数の上限 |
+| `CLAUDE_UPDATES_GROQ_API_KEY_EXPIRES_AT` | 推奨 | `YYYY-MM-DD` | Groq API キーの有効期限通知 |
+
 ### Groq API キーの取得
 
 1. [console.groq.com](https://console.groq.com) でアカウント作成
-2. **API Keys → Create API Key**（有効期限: No expiration 推奨）
-3. 生成したキーを `CLAUDE_UPDATES_GROQ_API_KEY` に登録
+2. **API Keys → Create API Key** でキーを生成
+3. **Secrets** の `CLAUDE_UPDATES_GROQ_API_KEY` を新しいキーで更新
+4. **Variables** の `CLAUDE_UPDATES_GROQ_API_KEY_EXPIRES_AT` をキーの有効期限（`YYYY-MM-DD`）で更新
+5. 失敗していたワークフローを再実行し、成功を確認
+
+キー期限の14日前・7日前・1日前・当日、および期限切れ後の日次実行で Discord に通知されます。通知を受けたら期限前にキーを再発行し、Secret と期限変数を必ずセットで更新してください。期限通知を利用する場合は `CLAUDE_UPDATES_DISCORD_WEBHOOK_URL` の登録も必要です。
 
 ## 使用技術
 
@@ -41,7 +52,7 @@ GitHub リポジトリの **Settings → Secrets and variables → Actions** に
 |---|---|
 | 実行環境 | GitHub Actions（ubuntu-latest） |
 | 言語 | Python 3.11 |
-| LLM | Groq API / LLaMA 3.3 70B（無料枠: 14,400 リクエスト/日） |
+| LLM | Groq API / LLaMA 3.3 70B（無料枠: 1,000 リクエスト/日） |
 | 監視対象 | [anthropics/claude-code](https://github.com/anthropics/claude-code/releases) |
 | スケジュール | 毎日 0:00 UTC（JST 9:00） |
 
