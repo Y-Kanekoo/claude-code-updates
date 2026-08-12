@@ -9,7 +9,7 @@ GitHub Actions（毎日 JST 9:00）
   ↓
 GitHub API でリリース一覧を取得
   ↓
-新リリースがあれば Groq API（LLaMA 3.3 70B）で日本語要約
+新リリースがあれば Groq API（GPT-OSS 120B）で日本語要約
   ↓
 Markdown レポートを reports/ に保存 → index.md / index.json を更新
   ↓
@@ -26,7 +26,7 @@ GitHub リポジトリの **Settings → Secrets and variables → Actions** に
 
 | シークレット名 | 必須 | 用途 |
 |---|---|---|
-| `CLAUDE_UPDATES_GROQ_API_KEY` | ✅ | Groq API（LLaMA 3.3 70B）でリリースノートを日本語要約 |
+| `CLAUDE_UPDATES_GROQ_API_KEY` | ✅ | Groq API（GPT-OSS 120B）でリリースノートを日本語要約 |
 | `CLAUDE_UPDATES_DISCORD_WEBHOOK_URL` | 任意 | 新リリース・失敗時の Discord 通知 |
 
 **Repository variables** には以下を登録してください。
@@ -52,7 +52,7 @@ GitHub リポジトリの **Settings → Secrets and variables → Actions** に
 |---|---|
 | 実行環境 | GitHub Actions（ubuntu-latest） |
 | 言語 | Python 3.11 |
-| LLM | Groq API / LLaMA 3.3 70B（無料枠: 1,000 リクエスト/日） |
+| LLM | Groq API / GPT-OSS 120B（`openai/gpt-oss-120b`、無料枠: 1,000 リクエスト/日） |
 | 監視対象 | [anthropics/claude-code](https://github.com/anthropics/claude-code/releases) |
 | スケジュール | 毎日 0:00 UTC（JST 9:00） |
 
