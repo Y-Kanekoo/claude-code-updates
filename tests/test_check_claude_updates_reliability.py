@@ -22,9 +22,18 @@ GroqAuthenticationError = check_module.GroqAuthenticationError
 
 
 class StatusError(Exception):
-    def __init__(self, status_code: int):
-        super().__init__(f"HTTP {status_code}")
+    def __init__(
+        self,
+        status_code: int,
+        headers: dict[str, str] | None = None,
+        message: str | None = None,
+    ):
+        super().__init__(message or f"HTTP {status_code}")
         self.status_code = status_code
+        self.response = SimpleNamespace(
+            status_code=status_code,
+            headers=headers or {},
+        )
 
 
 class FakeResponse:
@@ -219,7 +228,7 @@ def test_release_limit_processes_oldest_first_and_carries_over() -> None:
     assert [release["tag_name"] for release in second_batch] == ["v3", "v4"]
 
 
-def test_run_validates_auth_before_processing_and_saves_batch_checkpoint() -> None:
+def test_run_validates_auth_and_saves_checkpoint_after_each_release() -> None:
     checker = build_checker(max_releases_per_run=2)
     releases = [
         {"tag_name": f"v{version}", "body": "notes"}
@@ -247,7 +256,38 @@ def test_run_validates_auth_before_processing_and_saves_batch_checkpoint() -> No
 
     assert events == ["validate", "summarize:v1", "summarize:v2"]
     assert fetched_with == ["v0"]
-    assert saved == [("v2", "2026-08-13")]
+    assert saved == [("v1", "2026-08-13"), ("v2", "2026-08-13")]
+
+
+def test_run_preserves_partial_checkpoint_when_later_release_fails() -> None:
+    checker = build_checker(max_releases_per_run=3)
+    releases = [
+        {"tag_name": f"v{version}", "body": "notes"}
+        for version in range(3, 0, -1)
+    ]
+    saved: list[tuple[str, str]] = []
+
+    checker.get_last_checked_version = lambda: "v0"
+    checker.fetch_releases = lambda _last_version: releases
+    checker.validate_groq_authentication = lambda: None
+
+    def summarize(_notes: str, version: str) -> str:
+        if version == "v2":
+            raise RuntimeError("要約に失敗")
+        return "summary"
+
+    checker.summarize_release_notes = summarize
+    checker.create_report = lambda _release, _summary, _previous: "2026-08-13"
+    checker.send_discord_notification = lambda _release, _summary: None
+    checker.save_last_checked_version = (
+        lambda version, release_date: saved.append((version, release_date))
+    )
+
+    with pytest.raises(SystemExit) as exit_info:
+        checker.run()
+
+    assert exit_info.value.code == 1
+    assert saved == [("v1", "2026-08-13")]
 
 
 @pytest.mark.parametrize("status_code", [429, 500, 503])
@@ -271,6 +311,112 @@ def test_groq_retries_only_retryable_http_errors(
     assert checker._call_groq_api(operation, "テスト") == "success"
     assert attempts == 3
     assert delays == [1.0, 2.0]
+
+
+@pytest.mark.parametrize(
+    ("headers", "expected_delay"),
+    [
+        ({"retry-after-ms": "6130"}, 6.63),
+        ({"retry-after": "6.13"}, 6.63),
+        ({"x-ratelimit-reset-tokens": "6.13s"}, 6.63),
+        ({"x-ratelimit-reset-tokens": "1m2.5s"}, 60.0),
+    ],
+    ids=["retry-after-ms", "retry-after", "token-reset", "compound-token-reset"],
+)
+def test_groq_429_uses_server_retry_headers(
+    monkeypatch: pytest.MonkeyPatch,
+    headers: dict[str, str],
+    expected_delay: float,
+) -> None:
+    checker = build_checker()
+    attempts = 0
+    delays: list[float] = []
+
+    def operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise StatusError(429, headers=headers)
+        return "success"
+
+    monkeypatch.setattr(check_module.time, "sleep", delays.append)
+
+    assert checker._call_groq_api(operation, "テスト") == "success"
+    assert delays == [expected_delay]
+
+
+def test_groq_429_uses_message_retry_delay_as_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checker = build_checker()
+    attempts = 0
+    delays: list[float] = []
+
+    def operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise StatusError(
+                429,
+                message="Rate limit reached. Please try again in 6.13s.",
+            )
+        return "success"
+
+    monkeypatch.setattr(check_module.time, "sleep", delays.append)
+
+    assert checker._call_groq_api(operation, "テスト") == "success"
+    assert delays == [6.63]
+
+
+def test_groq_429_caps_excessive_server_retry_delay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checker = build_checker()
+    attempts = 0
+    delays: list[float] = []
+
+    def operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise StatusError(429, headers={"retry-after": "3600"})
+        return "success"
+
+    monkeypatch.setattr(check_module.time, "sleep", delays.append)
+
+    assert checker._call_groq_api(operation, "テスト") == "success"
+    assert delays == [check_module.GROQ_MAX_RETRY_DELAY_SECONDS]
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"retry-after-ms": "invalid"},
+        {"retry-after": "NaN"},
+        {"x-ratelimit-reset-tokens": "soon"},
+        {"retry-after": "-1"},
+    ],
+    ids=["invalid-ms", "not-finite", "invalid-duration", "negative"],
+)
+def test_groq_429_ignores_invalid_retry_headers(
+    monkeypatch: pytest.MonkeyPatch,
+    headers: dict[str, str],
+) -> None:
+    checker = build_checker()
+    attempts = 0
+    delays: list[float] = []
+
+    def operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise StatusError(429, headers=headers)
+        return "success"
+
+    monkeypatch.setattr(check_module.time, "sleep", delays.append)
+
+    assert checker._call_groq_api(operation, "テスト") == "success"
+    assert delays == [check_module.GROQ_RETRY_BASE_DELAY_SECONDS]
 
 
 def test_groq_retries_connection_errors(monkeypatch: pytest.MonkeyPatch) -> None:

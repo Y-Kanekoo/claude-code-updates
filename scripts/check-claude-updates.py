@@ -7,7 +7,9 @@ GitHub APIでanthropics/claude-codeのリリースを監視し、
 """
 
 import json
+import math
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -55,6 +57,8 @@ GITHUB_RELEASES_PER_PAGE = 100
 GITHUB_RELEASES_MAX_PAGES = 10
 GROQ_MAX_ATTEMPTS = 3
 GROQ_RETRY_BASE_DELAY_SECONDS = 1.0
+GROQ_RETRY_BUFFER_SECONDS = 0.5
+GROQ_MAX_RETRY_DELAY_SECONDS = 60.0
 SECTION_FIELDS = [
     ("judgement", "📊 判定", True, False),
     ("links", "🔗 リンク", True, False),
@@ -318,6 +322,14 @@ class ReleaseChecker:
                     raise
 
                 delay_seconds = GROQ_RETRY_BASE_DELAY_SECONDS * (2 ** (attempt - 1))
+                if status_code == 429:
+                    server_delay = self._extract_retry_delay_seconds(e)
+                    if server_delay is not None:
+                        delay_seconds = min(
+                            max(delay_seconds, server_delay)
+                            + GROQ_RETRY_BUFFER_SECONDS,
+                            GROQ_MAX_RETRY_DELAY_SECONDS,
+                        )
                 reason = (
                     f"HTTP {status_code}"
                     if status_code is not None
@@ -331,6 +343,96 @@ class ReleaseChecker:
                 time.sleep(delay_seconds)
 
         raise RuntimeError("Groq API呼び出しが予期せず終了しました")
+
+    @classmethod
+    def _extract_retry_delay_seconds(cls, error: Exception) -> Optional[float]:
+        """Groqの429応答から推奨待機秒数を安全に取得する。"""
+        response = getattr(error, "response", None)
+        raw_headers = getattr(response, "headers", None)
+        headers: Dict[str, object] = {}
+        if raw_headers is not None:
+            try:
+                headers = {
+                    str(name).lower(): value
+                    for name, value in raw_headers.items()
+                }
+            except (AttributeError, TypeError, ValueError):
+                headers = {}
+
+        delays: List[float] = []
+        retry_after_ms = cls._parse_non_negative_number(
+            headers.get("retry-after-ms")
+        )
+        if retry_after_ms is not None:
+            delays.append(retry_after_ms / 1000)
+
+        retry_after = cls._parse_non_negative_number(
+            headers.get("retry-after")
+        )
+        if retry_after is not None:
+            delays.append(retry_after)
+
+        token_reset = cls._parse_duration_seconds(
+            headers.get("x-ratelimit-reset-tokens")
+        )
+        if token_reset is not None:
+            delays.append(token_reset)
+
+        if delays:
+            return max(delays)
+
+        match = re.search(
+            r"try\s+again\s+in\s+(\d+(?:\.\d+)?)s\b",
+            str(error),
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return None
+        return cls._parse_non_negative_number(match.group(1))
+
+    @staticmethod
+    def _parse_non_negative_number(value: object) -> Optional[float]:
+        """有限の非負数だけをfloatとして返す。"""
+        if value is None or isinstance(value, bool):
+            return None
+        try:
+            number = float(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(number) or number < 0:
+            return None
+        return number
+
+    @classmethod
+    def _parse_duration_seconds(cls, value: object) -> Optional[float]:
+        """`6.13s` や `2m59.56s` 形式を秒へ変換する。"""
+        if value is None:
+            return None
+        raw_value = str(value).strip().lower()
+
+        milliseconds_match = re.fullmatch(r"(\d+(?:\.\d+)?)ms", raw_value)
+        if milliseconds_match:
+            milliseconds = cls._parse_non_negative_number(
+                milliseconds_match.group(1)
+            )
+            return None if milliseconds is None else milliseconds / 1000
+
+        duration_match = re.fullmatch(
+            r"(?:(\d+(?:\.\d+)?)h)?"
+            r"(?:(\d+(?:\.\d+)?)m)?"
+            r"(?:(\d+(?:\.\d+)?)s)?",
+            raw_value,
+        )
+        if not duration_match or not any(duration_match.groups()):
+            return None
+
+        hours, minutes, seconds = (
+            cls._parse_non_negative_number(part) if part is not None else 0.0
+            for part in duration_match.groups()
+        )
+        if hours is None or minutes is None or seconds is None:
+            return None
+        return hours * 3600 + minutes * 60 + seconds
 
     @staticmethod
     def _extract_status_code(error: Exception) -> Optional[int]:
@@ -886,8 +988,6 @@ Few-shot例:
 
             # 各リリースを古い順に、設定した上限まで処理
             releases_to_process = self.select_releases_for_run(new_releases)
-            latest_version = None
-            latest_date = None
             prev_version = last_version  # compare URL用に前バージョンを追跡
 
             for release in releases_to_process:
@@ -906,13 +1006,9 @@ Few-shot例:
                 # Discord通知を送信
                 self.send_discord_notification(release, summary)
 
-                latest_version = version
-                latest_date = date_str
+                # 後続リリースが失敗しても部分進捗を保持できるよう都度保存
+                self.save_last_checked_version(version, date_str)
                 prev_version = version  # 次のリリースのprev_versionとして使用
-
-            # 最新バージョンを保存
-            if latest_version:
-                self.save_last_checked_version(latest_version, latest_date)
 
             print("=" * 60)
             print(f"処理完了: {len(releases_to_process)} 件のレポートを作成しました")

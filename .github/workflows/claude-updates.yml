@@ -56,11 +56,14 @@ jobs:
           python scripts/check-claude-updates.py
 
       - name: インデックスを更新
+        id: generate_index
+        if: always()
         run: |
           python scripts/generate-index.py
 
       - name: 変更を確認
         id: check_changes
+        if: always()
         shell: bash
         run: |
           if [[ -n $(git status --porcelain) ]]; then
@@ -93,7 +96,9 @@ jobs:
           fi
 
       - name: 変更をコミット＆プッシュ
-        if: steps.check_changes.outputs.has_changes == 'true'
+        if: >-
+          ${{ always() && steps.generate_index.outcome == 'success' &&
+          steps.check_changes.outputs.has_changes == 'true' }}
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
