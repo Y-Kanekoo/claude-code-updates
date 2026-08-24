@@ -49,6 +49,8 @@ _SOURCE_PREFIX_CATEGORIES: Final[tuple[tuple[str, str], ...]] = (
 
 _BACKTICK_RE: Final[re.Pattern[str]] = re.compile(r"`([^`]+)`")
 
+# Groq Strict Structured OutputsはuniqueItemsを受理しないため、
+# 配列要素の重複はvalidate_structured_report()で検証する。
 STRUCTURED_REPORT_JSON_SCHEMA: Final[dict[str, object]] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$defs": {
@@ -60,7 +62,6 @@ STRUCTURED_REPORT_JSON_SCHEMA: Final[dict[str, object]] = {
                     "type": "array",
                     "items": {"type": "string", "pattern": "^R[1-9][0-9]*$"},
                     "minItems": 1,
-                    "uniqueItems": True,
                 },
             },
             "required": ["text", "source_ids"],
@@ -100,14 +101,12 @@ STRUCTURED_REPORT_JSON_SCHEMA: Final[dict[str, object]] = {
                     "identifiers": {
                         "type": "array",
                         "items": {"type": "string", "minLength": 1},
-                        "uniqueItems": True,
                     },
                     "source_ids": {
                         "type": "array",
                         "items": {"type": "string", "pattern": "^R[1-9][0-9]*$"},
                         "minItems": 1,
                         "maxItems": 1,
-                        "uniqueItems": True,
                     },
                 },
                 "required": [
@@ -389,6 +388,8 @@ def validate_structured_report(
         field_name = f"changes[{index}]"
         if change.category not in CATEGORY_HEADINGS:
             errors.append(f"{field_name}.categoryが未許可です: {change.category}")
+        if len(set(change.identifiers)) != len(change.identifiers):
+            errors.append(f"{field_name}.identifiersが重複しています。")
         if len(change.source_ids) != 1:
             errors.append(f"{field_name}.source_idsは1件だけ指定してください。")
         errors.extend(
