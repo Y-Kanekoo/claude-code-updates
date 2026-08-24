@@ -340,6 +340,52 @@ def build_empty_release_report() -> StructuredReport:
     )
 
 
+def build_source_fallback_report(
+    sources: Sequence[SourceBullet],
+) -> StructuredReport:
+    """LLM生成不能時に公式箇条書きを欠落なく原文で保持する。"""
+    if not sources:
+        return build_empty_release_report()
+
+    report = StructuredReport(
+        summary=GroundedText(
+            text=(
+                "Groqによる構造化要約を生成できなかったため、"
+                "公式リリースノートの変更項目を原文のまま掲載します。"
+            ),
+            source_ids=(sources[0].source_id,),
+        ),
+        judgement={
+            "影響度": "要確認",
+            "破壊的変更": "要確認",
+            "変更記載": "あり",
+            "推奨アクション": "次回更新時に確認",
+        },
+        highlights=(),
+        changes=tuple(
+            StructuredChange(
+                category=source.category,
+                title=source.text,
+                detail="",
+                identifiers=(),
+                source_ids=(source.source_id,),
+            )
+            for source in sources
+        ),
+        breaking_changes=(),
+        impact=(),
+        recommended_action=(),
+        notes=(),
+    )
+    errors = validate_structured_report(report, sources)
+    if errors:
+        raise StructuredReportError(
+            "公式リリースノートの決定的フォールバック生成に失敗しました:\n"
+            + "\n".join(f"- {error}" for error in errors)
+        )
+    return report
+
+
 def parse_or_build_empty_release(
     payload: Mapping[str, object] | None,
     release_notes: str,

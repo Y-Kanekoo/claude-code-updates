@@ -33,6 +33,7 @@ try:
         StructuredReportError,
         build_groq_response_format,
         build_source_bullets,
+        build_source_fallback_report,
         build_structured_request_payload,
         parse_structured_report,
         render_summary_markdown,
@@ -51,6 +52,7 @@ except ModuleNotFoundError:
         StructuredReportError,
         build_groq_response_format,
         build_source_bullets,
+        build_source_fallback_report,
         build_structured_request_payload,
         parse_structured_report,
         render_summary_markdown,
@@ -788,10 +790,12 @@ class ReleaseChecker:
                     f"警告: {version} の構造化要約を意味検証後に再生成します"
                 )
 
-        raise StructuredReportError(
-            f"{version} の構造化要約が{semantic_max_attempts}回の意味検証に失敗しました: "
+        print(
+            f"警告: {version} の構造化要約が{semantic_max_attempts}回失敗したため、"
+            "公式リリースノート原文の決定的フォールバックを使用します: "
             f"{validation_error}"
         )
+        return render_summary_markdown(build_source_fallback_report(sources))
 
     @staticmethod
     def _is_groq_json_schema_generation_error(error: Exception) -> bool:
