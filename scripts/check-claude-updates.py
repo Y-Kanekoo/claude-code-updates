@@ -556,57 +556,71 @@ class ReleaseChecker:
 
     @classmethod
     def _is_long_reset_delay(cls, error: Exception, delay_seconds: float) -> bool:
-        """長期resetヘッダーだけをfail-fast対象にする。"""
+        """実際に枯渇した日次リクエスト枠の長期resetだけを停止対象にする。"""
         if delay_seconds <= GROQ_MAX_RETRY_DELAY_SECONDS:
             return False
-        response = getattr(error, "response", None)
-        headers = getattr(response, "headers", {}) or {}
-        normalized_headers = {str(key).lower(): value for key, value in headers.items()}
-        # token resetは既存互換として60秒へcapする。日次枠の長期resetだけ停止する。
-        return "x-ratelimit-reset-requests" in normalized_headers
+        headers = cls._normalized_response_headers(error)
+        request_reset = cls._parse_duration_seconds(
+            headers.get("x-ratelimit-reset-requests")
+        )
+        remaining_requests = cls._parse_non_negative_number(
+            headers.get("x-ratelimit-remaining-requests")
+        )
+        # remainingがない旧応答はreset単独を有効として扱う。Groqの現行応答では
+        # resetは常時返るため、remainingが正なら日次枠の枯渇とは判定しない。
+        return (
+            request_reset is not None
+            and request_reset > GROQ_MAX_RETRY_DELAY_SECONDS
+            and (remaining_requests is None or remaining_requests <= 0)
+        )
 
     @classmethod
     def _extract_retry_delay_seconds(cls, error: Exception) -> float | None:
         """Groqの429応答から推奨待機秒数を安全に取得する。"""
-        response = getattr(error, "response", None)
-        raw_headers = getattr(response, "headers", None)
-        headers: dict[str, object] = {}
-        if raw_headers is not None:
-            try:
-                headers = {
-                    str(name).lower(): value
-                    for name, value in raw_headers.items()
-                }
-            except (AttributeError, TypeError, ValueError):
-                headers = {}
+        headers = cls._normalized_response_headers(error)
 
-        delays: list[float] = []
+        retry_delays: list[float] = []
         retry_after_ms = cls._parse_non_negative_number(
             headers.get("retry-after-ms")
         )
         if retry_after_ms is not None:
-            delays.append(retry_after_ms / 1000)
+            retry_delays.append(retry_after_ms / 1000)
 
         retry_after = cls._parse_non_negative_number(
             headers.get("retry-after")
         )
         if retry_after is not None:
-            delays.append(retry_after)
+            retry_delays.append(retry_after)
 
+        # 429で返るRetry-Afterは、どの制限に達したかを反映した最優先値として使う。
+        if retry_delays:
+            return max(retry_delays)
+
+        reset_delays: list[float] = []
         token_reset = cls._parse_duration_seconds(
             headers.get("x-ratelimit-reset-tokens")
         )
-        if token_reset is not None:
-            delays.append(token_reset)
+        remaining_tokens = cls._parse_non_negative_number(
+            headers.get("x-ratelimit-remaining-tokens")
+        )
+        if token_reset is not None and (
+            remaining_tokens is None or remaining_tokens <= 0
+        ):
+            reset_delays.append(token_reset)
 
         request_reset = cls._parse_duration_seconds(
             headers.get("x-ratelimit-reset-requests")
         )
-        if request_reset is not None:
-            delays.append(request_reset)
+        remaining_requests = cls._parse_non_negative_number(
+            headers.get("x-ratelimit-remaining-requests")
+        )
+        if request_reset is not None and (
+            remaining_requests is None or remaining_requests <= 0
+        ):
+            reset_delays.append(request_reset)
 
-        if delays:
-            return max(delays)
+        if reset_delays:
+            return max(reset_delays)
 
         match = re.search(
             r"try\s+again\s+in\s+(\d+(?:\.\d+)?)s\b",
@@ -616,6 +630,21 @@ class ReleaseChecker:
         if not match:
             return None
         return cls._parse_non_negative_number(match.group(1))
+
+    @staticmethod
+    def _normalized_response_headers(error: Exception) -> dict[str, object]:
+        """SDK例外の応答ヘッダーを小文字キーの辞書へ正規化する。"""
+        response = getattr(error, "response", None)
+        raw_headers = getattr(response, "headers", None)
+        if raw_headers is None:
+            return {}
+        try:
+            return {
+                str(name).lower(): value
+                for name, value in raw_headers.items()
+            }
+        except (AttributeError, TypeError, ValueError):
+            return {}
 
     @staticmethod
     def _parse_non_negative_number(value: object) -> float | None:
