@@ -485,6 +485,11 @@ def validate_structured_report(
         )
 
     empty_release = report.judgement.get("変更記載") == "具体的な変更記載なし"
+    if empty_release and sources:
+        errors.append(
+            "公式リリースノートに変更箇条書きがあるため、"
+            "変更記載を「具体的な変更記載なし」にはできません。"
+        )
     if empty_release and report.changes:
         errors.append("具体的な変更記載なしのレポートにchangesを指定できません。")
     if not empty_release and not report.changes:
