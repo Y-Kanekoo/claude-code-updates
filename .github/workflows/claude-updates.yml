@@ -49,6 +49,7 @@ jobs:
         run: pip install --require-hashes -r requirements.txt
 
       - name: レポートを生成
+        id: generate_report
         env:
           GROQ_API_KEY: ${{ secrets.CLAUDE_UPDATES_GROQ_API_KEY }}
           CLAUDE_UPDATES_GROQ_MODEL: ${{ env.CLAUDE_UPDATES_GROQ_MODEL }}
@@ -137,9 +138,24 @@ jobs:
         if: failure()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.CLAUDE_UPDATES_DISCORD_WEBHOOK_URL }}
+          FAILURE_TYPE: ${{ steps.generate_report.outputs.failure_type }}
+          ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GROQ_LIMITS_URL: https://console.groq.com/settings/limits
+          GROQ_BILLING_URL: https://console.groq.com/settings/billing/manage
         run: |
           if [[ -n "$DISCORD_WEBHOOK_URL" ]]; then
+            if [[ "$FAILURE_TYPE" == "groq_rate_limit" ]]; then
+              content=$(printf '%s\n%s\n%s\n%s\n%s' \
+                '🚦 **Groq APIの利用上限に到達しました**' \
+                'Claude Code更新チェックを中断しました。途中進捗は保持され、次回実行で続きから再開します。' \
+                "- [現在の利用上限を確認]($GROQ_LIMITS_URL)" \
+                "- [Developerプランへ更新]($GROQ_BILLING_URL)" \
+                "- [Actionsログを確認]($ACTIONS_RUN_URL)")
+            else
+              content="⚠️ Claude Code 更新チェックが失敗しました。[Actions ログを確認してください]($ACTIONS_RUN_URL)"
+            fi
+            payload=$(jq -n --arg content "$content" '{content: $content}')
             curl -s -X POST "$DISCORD_WEBHOOK_URL" \
               -H "Content-Type: application/json" \
-              -d "{\"content\": \"⚠️ Claude Code 更新チェックが失敗しました。[Actions ログを確認してください](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})\"}"
+              -d "$payload"
           fi
