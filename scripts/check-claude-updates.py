@@ -525,6 +525,11 @@ class ReleaseChecker:
                     or (status_code is not None and 500 <= status_code <= 599)
                     or self._is_groq_connection_error(e)
                 )
+                if status_code == 429 and attempt == GROQ_MAX_ATTEMPTS:
+                    raise GroqRateLimitError(
+                        "Groq APIのレート制限が再試行後も継続したため、"
+                        "この実行を停止します"
+                    ) from e
                 if not retryable or attempt == GROQ_MAX_ATTEMPTS:
                     raise
 
@@ -1224,9 +1229,27 @@ class ReleaseChecker:
             print(f"処理完了: {len(releases_to_process)} 件のレポートを作成しました")
             print("=" * 60)
 
+        except GroqRateLimitError as e:
+            self._record_failure_type("groq_rate_limit")
+            print(f"エラーが発生しました: {e}")
+            sys.exit(1)
         except Exception as e:  # noqa: BLE001 - CLI境界で終了コードへ変換
             print(f"エラーが発生しました: {e}")
             sys.exit(1)
+
+    @staticmethod
+    def _record_failure_type(failure_type: str) -> None:
+        """GitHub Actionsへ安全な失敗分類だけをstep outputとして渡す。"""
+        if failure_type != "groq_rate_limit":
+            raise ValueError(f"未対応の失敗分類です: {failure_type}")
+        output_path = os.getenv("GITHUB_OUTPUT")
+        if not output_path:
+            return
+        try:
+            with Path(output_path).open("a", encoding="utf-8") as output_file:
+                output_file.write(f"failure_type={failure_type}\n")
+        except OSError as error:
+            print(f"警告: GitHub Actionsへ失敗分類を出力できませんでした: {error}")
 
 
 def main():
