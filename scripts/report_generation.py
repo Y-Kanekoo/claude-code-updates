@@ -49,6 +49,8 @@ _SOURCE_PREFIX_CATEGORIES: Final[tuple[tuple[str, str], ...]] = (
 
 _BACKTICK_RE: Final[re.Pattern[str]] = re.compile(r"`([^`]+)`")
 
+# Groq Strict Structured OutputsはuniqueItemsを受理しないため、
+# 配列要素の重複はvalidate_structured_report()で検証する。
 STRUCTURED_REPORT_JSON_SCHEMA: Final[dict[str, object]] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "$defs": {
@@ -60,7 +62,6 @@ STRUCTURED_REPORT_JSON_SCHEMA: Final[dict[str, object]] = {
                     "type": "array",
                     "items": {"type": "string", "pattern": "^R[1-9][0-9]*$"},
                     "minItems": 1,
-                    "uniqueItems": True,
                 },
             },
             "required": ["text", "source_ids"],
@@ -100,14 +101,12 @@ STRUCTURED_REPORT_JSON_SCHEMA: Final[dict[str, object]] = {
                     "identifiers": {
                         "type": "array",
                         "items": {"type": "string", "minLength": 1},
-                        "uniqueItems": True,
                     },
                     "source_ids": {
                         "type": "array",
                         "items": {"type": "string", "pattern": "^R[1-9][0-9]*$"},
                         "minItems": 1,
                         "maxItems": 1,
-                        "uniqueItems": True,
                     },
                 },
                 "required": [
@@ -341,6 +340,52 @@ def build_empty_release_report() -> StructuredReport:
     )
 
 
+def build_source_fallback_report(
+    sources: Sequence[SourceBullet],
+) -> StructuredReport:
+    """LLM生成不能時に公式箇条書きを欠落なく原文で保持する。"""
+    if not sources:
+        return build_empty_release_report()
+
+    report = StructuredReport(
+        summary=GroundedText(
+            text=(
+                "Groqによる構造化要約を生成できなかったため、"
+                "公式リリースノートの変更項目を原文のまま掲載します。"
+            ),
+            source_ids=(sources[0].source_id,),
+        ),
+        judgement={
+            "影響度": "要確認",
+            "破壊的変更": "要確認",
+            "変更記載": "あり",
+            "推奨アクション": "次回更新時に確認",
+        },
+        highlights=(),
+        changes=tuple(
+            StructuredChange(
+                category=source.category,
+                title=source.text,
+                detail="",
+                identifiers=(),
+                source_ids=(source.source_id,),
+            )
+            for source in sources
+        ),
+        breaking_changes=(),
+        impact=(),
+        recommended_action=(),
+        notes=(),
+    )
+    errors = validate_structured_report(report, sources)
+    if errors:
+        raise StructuredReportError(
+            "公式リリースノートの決定的フォールバック生成に失敗しました:\n"
+            + "\n".join(f"- {error}" for error in errors)
+        )
+    return report
+
+
 def parse_or_build_empty_release(
     payload: Mapping[str, object] | None,
     release_notes: str,
@@ -389,6 +434,8 @@ def validate_structured_report(
         field_name = f"changes[{index}]"
         if change.category not in CATEGORY_HEADINGS:
             errors.append(f"{field_name}.categoryが未許可です: {change.category}")
+        if len(set(change.identifiers)) != len(change.identifiers):
+            errors.append(f"{field_name}.identifiersが重複しています。")
         if len(change.source_ids) != 1:
             errors.append(f"{field_name}.source_idsは1件だけ指定してください。")
         errors.extend(
@@ -438,6 +485,11 @@ def validate_structured_report(
         )
 
     empty_release = report.judgement.get("変更記載") == "具体的な変更記載なし"
+    if empty_release and sources:
+        errors.append(
+            "公式リリースノートに変更箇条書きがあるため、"
+            "変更記載を「具体的な変更記載なし」にはできません。"
+        )
     if empty_release and report.changes:
         errors.append("具体的な変更記載なしのレポートにchangesを指定できません。")
     if not empty_release and not report.changes:

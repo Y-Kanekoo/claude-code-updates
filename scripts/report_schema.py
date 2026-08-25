@@ -457,6 +457,7 @@ def build_header_table(judgement: dict[str, str], release_date: str) -> str:
 def _collect_section_markers(lines: list[str]) -> list[_SectionMarker]:
     markers: list[_SectionMarker] = []
     skipped_heading_indexes: set[int] = set()
+    has_section_anchors = any(_ANCHOR_RE.match(line) is not None for line in lines)
 
     for line_index, line in enumerate(lines):
         if line_index in skipped_heading_indexes:
@@ -482,6 +483,10 @@ def _collect_section_markers(lines: list[str]) -> list[_SectionMarker]:
 
         heading_match = _HEADING_RE.match(line)
         if heading_match is not None:
+            # アンカー付き正規形式のH3は「変更内容」配下のカテゴリ見出し。
+            # アンカーのない旧レポートだけH3をトップレベルとして互換解析する。
+            if has_section_anchors and heading_match.group("marks") == "###":
+                continue
             heading = _normalize_heading(heading_match.group("title"))
             markers.append(
                 _SectionMarker(
