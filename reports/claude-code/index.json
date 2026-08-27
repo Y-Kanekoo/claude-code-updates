@@ -1,6 +1,14 @@
 {
-  "generated_at": "2026-08-26T00:38:30+00:00",
+  "generated_at": "2026-08-27T05:36:19+00:00",
   "releases": [
+    {
+      "version": "v2.1.247",
+      "date": "2026-08-26",
+      "file": "2026-08-26-v2.1.247.md",
+      "tldr": "Claude CodeはSendFeedbackツールやコスト最適化コマンド、spinnerTipsOverrideの拡張など新機能を追加し、複数のバグ修正と仕様変更、改善を行いました。",
+      "impact": "中",
+      "breaking": "公式リリースノート上の明示なし"
+    },
     {
       "version": "v2.1.246",
       "date": "2026-08-25",
