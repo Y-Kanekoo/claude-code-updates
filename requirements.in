@@ -1,2 +1,2 @@
 requests==2.34.2
-groq==1.6.0
+groq==1.7.0
