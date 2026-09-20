@@ -1,6 +1,14 @@
 {
-  "generated_at": "2026-09-19T02:06:50+00:00",
+  "generated_at": "2026-09-20T02:12:08+00:00",
   "releases": [
+    {
+      "version": "v2.1.278",
+      "date": "2026-09-19",
+      "file": "2026-09-19-v2.1.278.md",
+      "tldr": "Claude API と Enterprise ユーザー、Bedrock、Vertex、Foundry、ゲートウェイで自動モードがサーバー側分類器にデフォルト変更され、/status に Auto mode server 行が追加されました。",
+      "impact": "高",
+      "breaking": "要確認"
+    },
     {
       "version": "v2.1.277",
       "date": "2026-09-18",
