@@ -22,6 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  PYTHONUNBUFFERED: '1'
   MAX_RELEASES_PER_RUN: ${{ vars.MAX_RELEASES_PER_RUN || '10' }}
   CLAUDE_UPDATES_GROQ_MODEL: ${{ vars.CLAUDE_UPDATES_GROQ_MODEL || 'openai/gpt-oss-120b' }}
 

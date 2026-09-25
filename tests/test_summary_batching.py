@@ -170,3 +170,31 @@ def test_batch_output_contract_references_ids_from_that_batch() -> None:
     payload = json.loads(updates.build_structured_request_payload("", sources))
     assert payload["output_contract"]["summary"]["source_ids"] == ["R13"]
     assert payload["output_contract"]["changes"][0]["source_ids"] == ["R13"]
+
+
+def test_lead_summary_prioritizes_new_features_over_routine_fixes() -> None:
+    from dataclasses import replace
+    from scripts.report_generation import (
+        GroundedText,
+        build_source_fallback_report,
+        merge_reports,
+    )
+
+    sources = build_source_bullets("- Added new model\n- Fixed scroll behavior")
+    feature = replace(
+        build_source_fallback_report(sources[:1]),
+        summary=GroundedText("新しいモデルを追加しました。", ("R1",)),
+        judgement={
+            "影響度": "中",
+            "破壊的変更": "公式リリースノート上の明示なし",
+            "変更記載": "あり",
+            "推奨アクション": "様子見",
+        },
+    )
+    fix = replace(
+        build_source_fallback_report(sources[1:]),
+        summary=GroundedText("スクロールを修正しました。", ("R2",)),
+    )
+    merged = merge_reports([feature, fix], sources)
+    assert "新しいモデルを追加しました。" in merged.summary.text
+    assert "スクロールを修正しました。" not in merged.summary.text

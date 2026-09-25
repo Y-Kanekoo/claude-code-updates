@@ -236,8 +236,11 @@ def merge_reports(
         judgement[key] = next(value for value in values if any(
             report.judgement.get(key) == value for report in reports
         ))
+    category_priority = {"セキュリティ": 0, "削除": 0, "廃止予定": 0, "新機能": 1, "仕様変更": 2, "改善": 3}
     ordered = sorted(reports, key=lambda report: (
-        rankings["推奨アクション"].index(report.judgement["推奨アクション"]),
+        report.judgement["破壊的変更"] != "あり",
+        report.judgement["推奨アクション"] != "即対応",
+        min((category_priority.get(change.category, 4) for change in report.changes), default=4),
         rankings["影響度"].index(report.judgement["影響度"]),
     ))
 

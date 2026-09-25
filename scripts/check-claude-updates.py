@@ -739,7 +739,10 @@ class ReleaseChecker:
             return self._build_empty_release_summary()
 
         batches = split_sources(sources)
-        reports = [self._summarize_batch(batch, version) for batch in batches]
+        reports = []
+        for index, batch in enumerate(batches, start=1):
+            print(f"分割要約 {index}/{len(batches)}: {batch[0].source_id}〜{batch[-1].source_id}")
+            reports.append(self._summarize_batch(batch, version))
         return render_summary_markdown(merge_reports(reports, sources))
 
     def _summarize_batch(
