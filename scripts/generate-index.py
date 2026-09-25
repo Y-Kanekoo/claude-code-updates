@@ -230,7 +230,8 @@ def _render_index_contents(
     latest_section = ""
     if latest:
         latest_lines = [
-            f"- **バージョン**: {latest['version']}",
+            f"- **バージョン**: [{latest['version']}](./{latest['file']})",
+            f"- **要点**: {latest['tldr'] or 'レポート本文を確認してください。'}",
             f"- **リリース日**: {latest['date']}",
         ]
         if latest["impact"] != "—":
@@ -244,6 +245,11 @@ def _render_index_contents(
 
 > 自動生成されています。最終更新: {today}
 {latest_section}
+## 読み方
+
+まず最新レポートの「要約」と「推奨対応」を確認してください。判定は自動要約による目安です。
+「公式リリースノート上の明示なし」は互換性の保証ではなく、「要確認」は原文の確認が必要な状態です。
+
 ## 全リリース一覧
 
 | バージョン | リリース日 | 影響度 | 破壊的変更 | 要点 |

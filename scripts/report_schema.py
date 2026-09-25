@@ -155,6 +155,12 @@ def extract_judgement(sections: dict[str, str]) -> dict[str, str]:
         value = match.group("value").strip()
         judgement[key] = value
 
+    # 第3版では同じ判定を重複表示せず、表1つから値を取得する。
+    table = _HEADER_DATA_RE.search(sections.get("judgement", ""))
+    if table:
+        for key, group in (("影響度", "impact"), ("破壊的変更", "breaking"),
+                           ("変更記載", "change_record"), ("推奨アクション", "recommended_action")):
+            judgement.setdefault(key, table.group(group).strip())
     return judgement
 
 
@@ -291,6 +297,14 @@ def _validate_canonical_structure(
             ]
         )
     known_anchor_ids = [item for item in anchor_ids if item in _CANONICAL_SECTION_SET]
+    if "<!-- report-format:3 -->" in lines:
+        expected_order = ["summary", "judgement"]
+        if not empty_release:
+            expected_order.extend([
+                "recommended_action", "impact", "highlights", "changes",
+                "breaking_changes", "notes",
+            ])
+        expected_order.append("links")
     if known_anchor_ids != expected_order:
         errors.append(
             "セクション順が正規形式と一致しません。"
@@ -532,3 +546,45 @@ def _find_present_anchors(markdown: str) -> set[str]:
         if match is not None:
             anchors.add(match.group(1))
     return anchors
+
+
+def render_reader_report(
+    version: str, release_date: str, summary: str, links: str, model: str,
+) -> str:
+    """結論・対応・対象・詳細の順に、根拠コメントを保って配置する。"""
+    blocks = {}
+    for block in re.split(r"(?=^<!-- section:)", summary, flags=re.MULTILINE):
+        match = re.match(r"<!-- section:(\w+) -->", block)
+        if match:
+            blocks[match.group(1)] = block.strip()
+    sections = parse_sections(summary)
+    judgement = extract_judgement(sections)
+    parts = [f"# Claude Code 更新レポート / {version}", "<!-- report-format:3 -->",
+             blocks["summary"], "<!-- section:judgement -->\n## 判定\n"
+             + build_header_table(judgement, release_date).rstrip()]
+    if not is_empty_release(judgement):
+        for section_id in ("recommended_action", "impact", "highlights", "changes", "breaking_changes", "notes"):
+            block = blocks[section_id]
+            if sections.get(section_id) == "なし":
+                descriptions = {
+                    "recommended_action": "追加の対応手順はこの要約にはありません。該当する使い方がある場合は、更新前に変更内容と公式ノートを確認してください。",
+                    "impact": "対象となる利用環境はこの要約から特定できません。変更内容と公式ノートを確認してください。",
+                    "highlights": "変更内容を下にまとめています。",
+                    "breaking_changes": "公式リリースノート上の明示なし。互換性を保証する判定ではありません。"
+                    if judgement.get("破壊的変更") == "公式リリースノート上の明示なし"
+                    else "自動要約だけでは判断できません。公式リリースノートを確認してください。",
+                    "notes": "追加の補足はありません。",
+                }
+                if section_id in descriptions:
+                    block = block.removesuffix("なし") + descriptions[section_id]
+            parts.append(block)
+    parts.append("<!-- section:links -->\n## 関連リンク\n" + links)
+    if is_empty_release(judgement):
+        footer = "自動生成 / 公式リリースノートに具体的な変更記載なし"
+    elif "<!-- generation:source-fallback -->" in summary or "公式リリースノートの変更項目を原文のまま掲載します" in summary:
+        parts.insert(2, "<!-- generation:source-fallback -->\n> 一部または全部の要約を生成できなかったため、変更項目を原文で保持しています。")
+        footer = "自動生成 / 原文を含む暫定レポート"
+    else:
+        footer = f"自動生成 / Groq {model} 要約・判定。公式情報を優先してください。"
+    parts.append(f"---\n<sub>{footer}</sub>")
+    return "\n\n".join(parts) + "\n"
