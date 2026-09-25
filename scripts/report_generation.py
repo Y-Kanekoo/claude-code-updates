@@ -201,6 +201,80 @@ class StructuredReportError(ValueError):
     """LLM構造化出力がスキーマまたは原文根拠を満たさない。"""
 
 
+def split_sources(
+    sources: Sequence[SourceBullet], max_bytes: int = 4500, max_items: int = 6,
+) -> list[tuple[SourceBullet, ...]]:
+    """根拠IDと変更項目を保ち、入力サイズと出力量を抑える。"""
+    batches: list[tuple[SourceBullet, ...]] = []
+    batch: list[SourceBullet] = []
+    size = 0
+    for source in sources:
+        source_size = len(source.text.encode("utf-8")) + 100
+        if batch and (size + source_size > max_bytes or len(batch) >= max_items):
+            batches.append(tuple(batch))
+            batch, size = [], 0
+        batch.append(source)
+        size += source_size
+    if batch:
+        batches.append(tuple(batch))
+    return batches
+
+
+def merge_reports(
+    reports: Sequence[StructuredReport], sources: Sequence[SourceBullet],
+) -> StructuredReport:
+    """LLMの再呼び出しなしで分割結果を統合し、重要な判定を維持する。"""
+    if len(reports) == 1:
+        return reports[0]
+    rankings = {
+        "影響度": ("高", "要確認", "中", "低"),
+        "破壊的変更": ("あり", "要確認", "公式リリースノート上の明示なし"),
+        "推奨アクション": ("即対応", "次回更新時に確認", "様子見"),
+    }
+    judgement = {"変更記載": "あり"}
+    for key, values in rankings.items():
+        judgement[key] = next(value for value in values if any(
+            report.judgement.get(key) == value for report in reports
+        ))
+    ordered = sorted(reports, key=lambda report: (
+        rankings["推奨アクション"].index(report.judgement["推奨アクション"]),
+        rankings["影響度"].index(report.judgement["影響度"]),
+    ))
+
+    def collect(field: str, limit: int | None = 3) -> tuple[GroundedText, ...]:
+        values: list[GroundedText] = []
+        seen: set[str] = set()
+        for report in ordered:
+            for value in getattr(report, field):
+                if value.text not in seen:
+                    values.append(value)
+                    seen.add(value.text)
+        return tuple(values[:limit] if limit is not None else values)
+
+    counts = {category: sum(source.category == category for source in sources)
+              for category in CATEGORY_HEADINGS}
+    count_text = "、".join(f"{category}{count}件" for category, count in counts.items() if count)
+    summary = GroundedText(
+        text=f"{len(sources)}件の変更（{count_text}）。主な変更: {ordered[0].summary.text}",
+        source_ids=tuple(source.source_id for source in sources),
+    )
+    merged = StructuredReport(
+        summary=summary, judgement=judgement,
+        highlights=collect("highlights"),
+        changes=tuple(change for report in reports for change in report.changes),
+        breaking_changes=collect("breaking_changes", None),
+        impact=collect("impact"), recommended_action=collect("recommended_action", None),
+        notes=collect("notes") + tuple(
+            report.summary for report in reports
+            if "公式リリースノートの変更項目を原文のまま掲載します" in report.summary.text
+        )[:1],
+    )
+    errors = validate_structured_report(merged, sources)
+    if errors:
+        raise StructuredReportError("分割要約の統合に失敗しました: " + "; ".join(errors))
+    return merged
+
+
 def build_source_bullets(release_notes: str) -> tuple[SourceBullet, ...]:
     """Markdown箇条書きを安定した ``R1`` 形式の根拠へ変換する。"""
     raw_items: list[str] = []
@@ -237,13 +311,16 @@ def classify_source_category(text: str) -> str:
     return "その他"
 
 
-def build_structured_request_payload(release_notes: str) -> str:
+def build_structured_request_payload(
+    release_notes: str, sources: Sequence[SourceBullet] | None = None,
+) -> str:
     """LLMへ渡す根拠付きJSON入力を生成する。
 
     固定の指示はsystem messageに置き、この戻り値は外部データとしてuser
     messageへ渡すことを想定する。
     """
-    sources = build_source_bullets(release_notes)
+    if sources is None:
+        sources = build_source_bullets(release_notes)
     payload: dict[str, object] = {
         "sources": [
             {
@@ -277,7 +354,7 @@ def build_structured_request_payload(release_notes: str) -> str:
             "notes": [],
         },
     }
-    return json.dumps(payload, ensure_ascii=False, indent=2)
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
 def build_groq_response_format() -> dict[str, object]:
@@ -514,6 +591,9 @@ def render_summary_markdown(report: StructuredReport) -> str:
         ),
         _render_grounded_section("notes", "補足", report.notes),
     ]
+    if any("公式リリースノートの変更項目を原文のまま掲載します" in value.text
+           for value in (report.summary, *report.notes)):
+        parts.insert(0, "<!-- generation:source-fallback -->")
     return "\n\n".join(parts)
 
 

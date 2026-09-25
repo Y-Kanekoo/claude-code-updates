@@ -7,6 +7,11 @@ on:
 
   # 手動実行も可能
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'レポートを検証用成果物に保存し、公開・Discord送信を行わない'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -39,7 +44,9 @@ jobs:
           cache: 'pip'
 
       - name: Groq API キーの期限を確認
+        if: ${{ !inputs.dry_run }}
         env:
+          QUEUE_NOTIFICATIONS: '1'
           CLAUDE_UPDATES_GROQ_API_KEY_EXPIRES_AT: ${{ vars.CLAUDE_UPDATES_GROQ_API_KEY_EXPIRES_AT }}
           DISCORD_WEBHOOK_URL: ${{ secrets.CLAUDE_UPDATES_DISCORD_WEBHOOK_URL }}
           ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -54,7 +61,6 @@ jobs:
           GROQ_API_KEY: ${{ secrets.CLAUDE_UPDATES_GROQ_API_KEY }}
           CLAUDE_UPDATES_GROQ_MODEL: ${{ env.CLAUDE_UPDATES_GROQ_MODEL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.CLAUDE_UPDATES_DISCORD_WEBHOOK_URL }}
         run: |
           python scripts/check-claude-updates.py
 
@@ -66,12 +72,15 @@ jobs:
           report_changes=$(git status --porcelain -- \
             reports/claude-code \
             ':(exclude)reports/claude-code/index.md' \
-            ':(exclude)reports/claude-code/index.json')
+            ':(exclude)reports/claude-code/index.json' \
+            ':(exclude)reports/claude-code/notification-state.json' \
+            ':(exclude)reports/claude-code/summary-cache/**')
           if [[ -z "$report_changes" ]]; then
             echo "レポートの変更がないため、インデックス更新をスキップします"
             exit 0
           fi
           python scripts/generate-index.py
+          echo "has_reports=true" >> "$GITHUB_OUTPUT"
 
       - name: 変更を確認
         id: check_changes
@@ -100,7 +109,7 @@ jobs:
       - name: 変更をコミット＆プッシュ
         id: commit_reports
         if: >-
-          ${{ always() && steps.generate_index.outcome == 'success' &&
+          ${{ always() && !inputs.dry_run && steps.generate_index.outcome == 'success' &&
           steps.check_changes.outputs.has_changes == 'true' }}
         run: |
           git config --local user.name "github-actions[bot]"
@@ -116,7 +125,7 @@ jobs:
       - name: スライド更新トリガーを記録
         if: >-
           ${{ always() && steps.commit_reports.outcome == 'success' &&
-          steps.check_changes.outputs.has_changes == 'true' }}
+          steps.generate_index.outputs.has_reports == 'true' }}
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/slides-trigger"
@@ -126,7 +135,7 @@ jobs:
       - name: スライド更新トリガーを保存
         if: >-
           ${{ always() && steps.commit_reports.outcome == 'success' &&
-          steps.check_changes.outputs.has_changes == 'true' }}
+          steps.generate_index.outputs.has_reports == 'true' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: slides-trigger
@@ -134,28 +143,53 @@ jobs:
           retention-days: 1
           if-no-files-found: error
 
-      - name: 失敗時に Discord へ通知
-        if: failure()
+      - name: 公開済みの更新と運用状態を Discord へ通知
+        id: notify
+        if: ${{ always() && !cancelled() && !inputs.dry_run }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.CLAUDE_UPDATES_DISCORD_WEBHOOK_URL }}
           FAILURE_TYPE: ${{ steps.generate_report.outputs.failure_type }}
+          FAILED_VERSION: ${{ steps.generate_report.outputs.failed_version }}
+          RUN_FAILED: ${{ job.status == 'failure' }}
+          REPORTS_PUBLISHED: >-
+            ${{ steps.generate_index.outcome == 'success' &&
+            (steps.commit_reports.outcome == 'success' || steps.check_changes.outputs.has_changes == 'false') }}
           ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GROQ_LIMITS_URL: https://console.groq.com/settings/limits
           GROQ_BILLING_URL: https://console.groq.com/settings/billing/manage
         run: |
-          if [[ -n "$DISCORD_WEBHOOK_URL" ]]; then
-            if [[ "$FAILURE_TYPE" == "groq_rate_limit" ]]; then
-              content=$(printf '%s\n%s\n%s\n%s\n%s' \
-                '🚦 **Groq APIの利用上限に到達しました**' \
-                'Claude Code更新チェックを中断しました。途中進捗は保持され、次回実行で続きから再開します。' \
-                "- [現在の利用上限を確認]($GROQ_LIMITS_URL)" \
-                "- [Developerプランへ更新]($GROQ_BILLING_URL)" \
-                "- [Actionsログを確認]($ACTIONS_RUN_URL)")
-            else
-              content="⚠️ Claude Code 更新チェックが失敗しました。[Actions ログを確認してください]($ACTIONS_RUN_URL)"
-            fi
-            payload=$(jq -n --arg content "$content" '{content: $content}')
-            curl -s -X POST "$DISCORD_WEBHOOK_URL" \
-              -H "Content-Type: application/json" \
-              -d "$payload"
+          if [[ "$FAILURE_TYPE" == "groq_rate_limit" ]]; then
+            {
+              echo '## Groq APIの利用上限に到達しました'
+              if [[ "$REPORTS_PUBLISHED" == 'true' ]]; then
+                echo '途中進捗は保持され、次回実行で続きから再開します。'
+              fi
+              echo "[利用上限]($GROQ_LIMITS_URL) / [料金設定（変更は任意）]($GROQ_BILLING_URL)"
+              echo "[Actionsログを確認]($ACTIONS_RUN_URL)"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
+          python scripts/notification_delivery.py
+
+      - name: 送信結果と障害の通知状態を保存
+        if: ${{ always() && !inputs.dry_run }}
+        run: |
+          if [[ ! -f reports/claude-code/notification-state.json ]]; then
+            exit 0
+          fi
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git add -- reports/claude-code/notification-state.json
+          if git diff --cached --quiet -- reports/claude-code/notification-state.json; then
+            exit 0
+          fi
+          git commit -m "[ops] 更新通知の送信結果を保存"
+          git push
+
+      - name: 検証用レポートと通知状態を保存
+        if: ${{ always() && (inputs.dry_run || failure()) }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: report-preview
+          path: reports/claude-code
+          retention-days: 7
+          if-no-files-found: warn

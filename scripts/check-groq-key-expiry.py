@@ -120,6 +120,18 @@ def main() -> int:
         days_remaining,
         os.getenv("ACTIONS_RUN_URL", "").strip(),
     )
+    if os.getenv("QUEUE_NOTIFICATIONS") == "1":
+        from notification_delivery import NotificationStore, REPORTS_DIR, STATE_NAME
+        # 期限切れ後は週単位でまとめ、日次の同内容通知を避ける。
+        milestone = str(days_remaining) if days_remaining >= 0 else f"expired-{abs(days_remaining) // 7}"
+        NotificationStore(REPORTS_DIR / STATE_NAME).enqueue(
+            f"key-expiry:{expiry_date.isoformat()}:{milestone}",
+            {"content": message, "allowed_mentions": {"parse": []}},
+            requires_publication=False,
+        )
+        print("Groq APIキーの期限通知を送信待ちに登録しました。")
+        return 0
+
     webhook_url = os.getenv(WEBHOOK_ENV_NAME, "").strip()
     if not webhook_url:
         print(
