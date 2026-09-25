@@ -9,7 +9,10 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from notification_delivery import NotificationStore, REPORTS_DIR, STATE_NAME
+try:
+    from notification_delivery import NotificationStore, REPORTS_DIR, STATE_NAME
+except ModuleNotFoundError:
+    from scripts.notification_delivery import NotificationStore, REPORTS_DIR, STATE_NAME
 
 
 def gh_json(arguments: list[str]) -> object:
