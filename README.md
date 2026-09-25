@@ -67,7 +67,9 @@ GitHub リポジトリの **Settings → Secrets and variables → Actions** に
 
 ### 本番APIを使う送信なしの検証
 
-Actionsの **Claude Code Updates Report → Run workflow** で `dry_run` を有効にします。生成したレポートと通知データを `report-preview` 成果物から確認できます。この実行ではGitへの保存、スライド公開、Discord送信を行いません。
+Actionsの **Claude Code Updates Report → Run workflow** で `dry_run` を有効にします。生成したレポートと通知データを `report-preview` 成果物から確認できます。この実行ではGitへの保存、スライド公開、Discord送信を行いません。`max_releases` に `1` を指定すると、未処理の最古リリース1件だけを確認できます。
+
+通常実行も処理を20分を目安に区切り、途中成果を保存して次回に再開します。通知状態のGit保存に失敗した場合は、次回実行の冒頭で復元用成果物から送信確認を取り込みます。
 
 ```bash
 .venv/bin/pytest -q

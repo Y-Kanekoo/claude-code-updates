@@ -506,6 +506,8 @@ def validate_structured_report(
         grounded_fields.extend((field_name, value) for value in values)
 
     for field_name, value in grounded_fields:
+        if not re.search(r"[\u3040-\u30ff\u3400-\u9fff]", value.text):
+            errors.append(f"{field_name}は識別子や引用だけでなく、日本語の説明を含めてください。")
         errors.extend(
             _validate_grounding(
                 field_name,

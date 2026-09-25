@@ -759,7 +759,7 @@ class ReleaseChecker:
         cache_dir = getattr(self, "summary_cache_dir", None)
         cache_path = None
         if cache_dir is not None:
-            material = "reader-v3-2:" + self._configured_llm_model() + build_structured_request_payload("", sources)
+            material = "reader-v3-3:" + self._configured_llm_model() + build_structured_request_payload("", sources)
             digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
             cache_path = cache_dir / f"{version}-{digest}.json"
             if cache_path.exists():
@@ -793,6 +793,7 @@ class ReleaseChecker:
             "変更と対応を混同せず、任意設定を必須の対応として勧めないでください。"
             "即対応は互換性破壊や移行必須が原文に明示される場合だけです。"
             "原文に具体的な手順や移行の指定がない時はrecommended_actionを空配列にしてください。"
+            "原文に代替手段や設定操作が示されている場合は、対象条件を添えて推奨対応を書いてください。"
             "単なる更新の勧めや一般的なテスト手順を創作しないでください。"
             "修正だけなら次回更新時に確認としてください。原文に明示のない破壊的変更は"
             "公式リリースノート上の明示なしとしてください。"

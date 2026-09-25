@@ -567,8 +567,8 @@ def render_reader_report(
             block = blocks[section_id]
             if sections.get(section_id) == "なし":
                 descriptions = {
-                    "recommended_action": "公式ノートに具体的な対応の指定はありません。該当する使い方がある場合は、変更内容を確認してください。",
-                    "impact": "公式ノートに対象となる利用環境の明示はありません。",
+                    "recommended_action": "追加の対応手順はこの要約にはありません。該当する使い方がある場合は、更新前に変更内容と公式ノートを確認してください。",
+                    "impact": "対象となる利用環境はこの要約から特定できません。変更内容と公式ノートを確認してください。",
                     "highlights": "変更内容を下にまとめています。",
                     "breaking_changes": "公式リリースノート上の明示なし。互換性を保証する判定ではありません。"
                     if judgement.get("破壊的変更") == "公式リリースノート上の明示なし"

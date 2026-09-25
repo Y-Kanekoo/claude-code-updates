@@ -237,3 +237,13 @@ def test_breaking_judgement_requires_concrete_grounded_explanation() -> None:
     payload["judgement"]["破壊的変更"] = "あり"
     with pytest.raises(updates.StructuredReportError, match="具体的な説明"):
         updates.parse_structured_report(payload, sources)
+
+
+def test_untranslated_highlight_is_rejected_before_notification() -> None:
+    sources = updates.build_source_bullets("- Changed effort settings")
+    payload = json.loads(
+        json.dumps(asdict(updates.build_source_fallback_report(sources)))
+    )
+    payload["highlights"] = [{"text": "Changed effort settings", "source_ids": ["R1"]}]
+    with pytest.raises(updates.StructuredReportError, match="日本語の説明"):
+        updates.parse_structured_report(payload, sources)
