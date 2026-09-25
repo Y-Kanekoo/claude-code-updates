@@ -161,3 +161,12 @@ def test_queue_failure_prevents_checkpoint_advancing(
     with pytest.raises(SystemExit):
         checker.run()
     assert saved == []
+
+
+def test_batch_output_contract_references_ids_from_that_batch() -> None:
+    sources = tuple(
+        updates.SourceBullet(f"R{i}", "Fixed crash", "バグ修正") for i in (13, 14)
+    )
+    payload = json.loads(updates.build_structured_request_payload("", sources))
+    assert payload["output_contract"]["summary"]["source_ids"] == ["R13"]
+    assert payload["output_contract"]["changes"][0]["source_ids"] == ["R13"]

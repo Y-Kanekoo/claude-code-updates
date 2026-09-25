@@ -229,3 +229,29 @@ def test_reader_report_puts_action_before_detail_and_keeps_source_provenance() -
     assert "<!-- sources:R1 -->" in report
     assert "<!-- generation:source-fallback -->" in report
     assert "原文を含む暫定レポート" in report
+
+
+def test_expiry_reminder_does_not_depend_on_report_publication(tmp_path: Path) -> None:
+    store = delivery.NotificationStore(tmp_path / "state.json")
+    store.enqueue("v1", {"content": "更新"})
+    store.enqueue("key-expiry", {"content": "期限確認"}, requires_publication=False)
+    calls = []
+    store.deliver(lambda payload: calls.append(payload) or "1", published=False)
+    assert calls == [{"content": "期限確認"}]
+    assert list(store.data["pending"]) == ["v1"]
+
+
+def test_broken_incident_timestamp_requires_restoration(tmp_path: Path) -> None:
+    path = tmp_path / "state.json"
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pending": {},
+                "delivered": {},
+                "incident": {"key": "error", "sent_at": "昨日"},
+            }
+        )
+    )
+    with pytest.raises(RuntimeError, match="復旧"):
+        delivery.NotificationStore(path)

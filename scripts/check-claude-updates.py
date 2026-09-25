@@ -755,6 +755,8 @@ class ReleaseChecker:
             if cache_path.exists():
                 try:
                     payload = json.loads(cache_path.read_text(encoding="utf-8"))
+                    if not isinstance(payload, dict):
+                        raise ValueError("分割要約のキャッシュ形式が不正です")
                     report = parse_structured_report(payload, sources)
                     if {sid for change in report.changes for sid in change.source_ids} == {source.source_id for source in sources}:
                         print(f"保存済みの分割要約を再利用します: {version}")

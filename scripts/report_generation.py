@@ -321,6 +321,7 @@ def build_structured_request_payload(
     """
     if sources is None:
         sources = build_source_bullets(release_notes)
+    example_id = sources[0].source_id if sources else "R1"
     payload: dict[str, object] = {
         "sources": [
             {
@@ -331,21 +332,21 @@ def build_structured_request_payload(
             for source in sources
         ],
         "output_contract": {
-            "summary": {"text": "日本語1文", "source_ids": ["R1"]},
+            "summary": {"text": "日本語1文", "source_ids": [example_id]},
             "judgement": {
                 "影響度": IMPACT_LEVELS,
                 "破壊的変更": BREAKING_LEVELS,
                 "変更記載": CHANGE_RECORD_LEVELS,
                 "推奨アクション": RECOMMENDED_ACTION_LEVELS,
             },
-            "highlights": [{"text": "日本語1文", "source_ids": ["R1"]}],
+            "highlights": [{"text": "日本語1文", "source_ids": [example_id]}],
             "changes": [
                 {
                     "category": "入力sourceのcategoryと同じ値",
                     "title": "日本語の要旨",
                     "detail": "追加説明または空文字",
                     "identifiers": ["原文に存在する識別子"],
-                    "source_ids": ["R1"],
+                    "source_ids": [example_id],
                 }
             ],
             "breaking_changes": [],

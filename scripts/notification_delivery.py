@@ -194,6 +194,14 @@ class NotificationStore:
                         entry.get("payload"), dict
                     ):
                         raise ValueError("未送信通知の形式が不正です")
+                incident = data.get("incident")
+                if incident is not None:
+                    if not isinstance(incident.get("key"), str) or not isinstance(
+                        incident.get("sent_at"), str
+                    ):
+                        raise ValueError("障害の通知状態が不正です")
+                    if datetime.fromisoformat(incident["sent_at"]).tzinfo is None:
+                        raise ValueError("障害通知の日付にタイムゾーンがありません")
                 self.data = data
             except (ValueError, OSError) as exc:
                 raise RuntimeError(
