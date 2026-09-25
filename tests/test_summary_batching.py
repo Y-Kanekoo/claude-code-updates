@@ -197,7 +197,9 @@ def test_lead_summary_prioritizes_new_features_over_routine_fixes() -> None:
     )
     merged = merge_reports([feature, fix], sources)
     assert "新しいモデルを追加しました。" in merged.summary.text
-    assert "スクロールを修正しました。" not in merged.summary.text
+    assert merged.summary.text.index(
+        "新しいモデルを追加しました。"
+    ) < merged.summary.text.index("スクロールを修正しました。")
 
 
 def test_time_budget_defers_before_starting_another_api_request(monkeypatch) -> None:
@@ -225,3 +227,13 @@ def test_deferred_generation_keeps_successful_checkpoint_without_failure() -> No
     checker.save_last_checked_version = lambda *args: writes.append(args)
     checker.run()
     assert writes == []
+
+
+def test_breaking_judgement_requires_concrete_grounded_explanation() -> None:
+    sources = updates.build_source_bullets("- Removed old hook")
+    payload = json.loads(
+        json.dumps(asdict(updates.build_source_fallback_report(sources)))
+    )
+    payload["judgement"]["破壊的変更"] = "あり"
+    with pytest.raises(updates.StructuredReportError, match="具体的な説明"):
+        updates.parse_structured_report(payload, sources)

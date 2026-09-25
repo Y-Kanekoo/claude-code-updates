@@ -247,18 +247,22 @@ def merge_reports(
     def collect(field: str, limit: int | None = 3) -> tuple[GroundedText, ...]:
         values: list[GroundedText] = []
         seen: set[str] = set()
-        for report in ordered:
-            for value in getattr(report, field):
-                if value.text not in seen:
-                    values.append(value)
-                    seen.add(value.text)
+        # 1つの分割結果だけで冒頭を埋めず、重要な話題を横断して拾う。
+        groups = [getattr(report, field) for report in ordered]
+        for index in range(max((len(group) for group in groups), default=0)):
+            for group in groups:
+                if index < len(group) and group[index].text not in seen:
+                    values.append(group[index])
+                    seen.add(group[index].text)
         return tuple(values[:limit] if limit is not None else values)
 
     counts = {category: sum(source.category == category for source in sources)
               for category in CATEGORY_HEADINGS}
     count_text = "、".join(f"{category}{count}件" for category, count in counts.items() if count)
     summary = GroundedText(
-        text=f"{len(sources)}件の変更（{count_text}）。主な変更: {ordered[0].summary.text}",
+        text=f"{len(sources)}件の変更（{count_text}）。主な変更: " + " / ".join(
+            report.summary.text for report in ordered[:2]
+        ),
         source_ids=tuple(source.source_id for source in sources),
     )
     merged = StructuredReport(
@@ -550,6 +554,9 @@ def validate_structured_report(
                         f"{field_name}の識別子「{identifier}」が参照元"
                         f"{source.source_id}に存在しません。"
                     )
+
+    if report.judgement.get("破壊的変更") == "あり" and not report.breaking_changes:
+        errors.append("破壊的変更ありの判定には、breaking_changesに根拠付きの具体的な説明が必要です。")
 
     change_source_ids = [
         source_id for change in report.changes for source_id in change.source_ids
