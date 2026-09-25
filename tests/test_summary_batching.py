@@ -198,3 +198,30 @@ def test_lead_summary_prioritizes_new_features_over_routine_fixes() -> None:
     merged = merge_reports([feature, fix], sources)
     assert "新しいモデルを追加しました。" in merged.summary.text
     assert "スクロールを修正しました。" not in merged.summary.text
+
+
+def test_time_budget_defers_before_starting_another_api_request(monkeypatch) -> None:
+    checker = object.__new__(updates.ReleaseChecker)
+    checker.processing_deadline = 20
+    monkeypatch.setattr(updates.time, "monotonic", lambda: 21)
+    calls = []
+    with pytest.raises(updates.ProcessingDeferred):
+        checker._call_groq_api(lambda: calls.append("API"), "テスト")
+    assert calls == []
+
+
+def test_deferred_generation_keeps_successful_checkpoint_without_failure() -> None:
+    checker = object.__new__(updates.ReleaseChecker)
+    checker.max_releases_per_run = 10
+    checker.get_last_checked_version = lambda: "v1.2.2"
+    checker.validate_groq_authentication = lambda: None
+    checker.fetch_releases = lambda previous: [
+        {"tag_name": "v1.2.3", "body": "- Fixed crash"}
+    ]
+    checker.summarize_release_notes = lambda *args: (_ for _ in ()).throw(
+        updates.ProcessingDeferred("次回再開")
+    )
+    writes = []
+    checker.save_last_checked_version = lambda *args: writes.append(args)
+    checker.run()
+    assert writes == []

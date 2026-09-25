@@ -250,6 +250,7 @@ class NotificationStore:
         send: Callable[[Mapping[str, object]], str],
         *,
         published: bool,
+        deferred: bool = False,
         failure_type: str = "",
         failed_version: str = "",
         run_url: str = "",
@@ -306,7 +307,7 @@ class NotificationStore:
             self.data["incident"] = {"key": key, "sent_at": now.isoformat()}
             self.data["incident_updated_at"] = now.isoformat()
             self.save()
-        elif published and incident:
+        elif published and incident and not deferred:
             send(
                 {
                     "content": "✅ Claude Code 更新処理が復旧しました。公開済みレポートの未送信通知も送信しました。"
@@ -397,6 +398,7 @@ def main() -> int:
         store.deliver(
             lambda payload: post_webhook(webhook_url, payload),
             published=os.getenv("REPORTS_PUBLISHED") == "true",
+            deferred=os.getenv("RUN_DEFERRED") == "true",
             failure_type=os.getenv("FAILURE_TYPE", "")
             if os.getenv("RUN_FAILED") != "true"
             else os.getenv("FAILURE_TYPE", "") or "workflow_failure",

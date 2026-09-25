@@ -298,3 +298,17 @@ def test_recovered_incident_state_prevents_repeated_recovery(tmp_path: Path) -> 
     calls = []
     remote.deliver(lambda payload: calls.append(payload) or "3", published=True)
     assert calls == []
+
+
+def test_time_deferral_does_not_announce_recovery(tmp_path: Path) -> None:
+    store = delivery.NotificationStore(tmp_path / "state.json")
+    calls = []
+
+    def send(payload):
+        calls.append(payload)
+        return "1"
+
+    store.deliver(send, published=True, failure_type="groq_rate_limit")
+    store.deliver(send, published=True, deferred=True)
+    assert len(calls) == 1
+    assert store.data["incident"] is not None

@@ -123,6 +123,10 @@ T = TypeVar("T")
 SEMANTIC_VERSION_PATTERN = re.compile(r"^v\d+\.\d+\.\d+$")
 
 
+class ProcessingDeferred(RuntimeError):
+    """実行時間の予算に達したため、保存して次回に再開する。"""
+
+
 class GroqAuthenticationError(RuntimeError):
     """Groq APIキーの認証・認可失敗を表す例外。"""
 
@@ -197,7 +201,8 @@ class ReleaseChecker:
             raise ImportError("groq パッケージがインストールされていません")
 
         # Groq APIの設定
-        self.client = Groq(api_key=self.groq_api_key, max_retries=0)
+        self.client = Groq(api_key=self.groq_api_key, max_retries=0, timeout=45)
+        self.processing_deadline = time.monotonic() + 20 * 60
 
         # GitHub APIトークン（任意）
         self.github_token = os.getenv("GITHUB_TOKEN")
@@ -515,6 +520,8 @@ class ReleaseChecker:
     ) -> T:
         """再試行対象を接続障害・429・5xxに限定してGroq APIを呼ぶ。"""
         for attempt in range(1, GROQ_MAX_ATTEMPTS + 1):
+            if time.monotonic() >= getattr(self, "processing_deadline", float("inf")):
+                raise ProcessingDeferred("処理時間の上限に達したため、完了した分割要約を保存して次回再開します。")
             try:
                 return operation()
             except Exception as e:
@@ -1205,6 +1212,12 @@ class ReleaseChecker:
             print(f"処理完了: {len(releases_to_process)} 件のレポートを作成しました")
             print("=" * 60)
 
+        except ProcessingDeferred as e:
+            output_path = os.getenv("GITHUB_OUTPUT")
+            if output_path:
+                with Path(output_path).open("a", encoding="utf-8") as output_file:
+                    output_file.write("deferred=true\n")
+            print(str(e))
         except GroqRateLimitError as e:
             self._record_failure_type("groq_rate_limit")
             self._record_failed_version(version)

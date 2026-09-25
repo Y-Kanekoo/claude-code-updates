@@ -12,6 +12,10 @@ on:
         description: 'レポートを検証用成果物に保存し、公開・Discord送信を行わない'
         type: boolean
         default: false
+      max_releases:
+        description: '処理するリリース数（1〜10、空欄はリポジトリ設定）'
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -23,7 +27,7 @@ concurrency:
 
 env:
   PYTHONUNBUFFERED: '1'
-  MAX_RELEASES_PER_RUN: ${{ vars.MAX_RELEASES_PER_RUN || '10' }}
+  MAX_RELEASES_PER_RUN: ${{ inputs.max_releases || vars.MAX_RELEASES_PER_RUN || '10' }}
   CLAUDE_UPDATES_GROQ_MODEL: ${{ vars.CLAUDE_UPDATES_GROQ_MODEL || 'openai/gpt-oss-120b' }}
 
 jobs:
@@ -160,6 +164,7 @@ jobs:
           FAILURE_TYPE: ${{ steps.generate_report.outputs.failure_type }}
           FAILED_VERSION: ${{ steps.generate_report.outputs.failed_version }}
           RUN_FAILED: ${{ job.status == 'failure' }}
+          RUN_DEFERRED: ${{ steps.generate_report.outputs.deferred }}
           REPORTS_PUBLISHED: >-
             ${{ steps.generate_index.outcome == 'success' &&
             (steps.commit_reports.outcome == 'success' || steps.check_changes.outputs.has_changes == 'false') }}
