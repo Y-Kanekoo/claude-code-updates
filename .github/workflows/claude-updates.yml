@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: claude-updates-${{ github.ref }}
@@ -42,6 +43,13 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
+
+      - name: 前回の送信確認を復元
+        id: restore_notifications
+        if: ${{ !inputs.dry_run }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/restore-notification-state.py
 
       - name: Groq API キーの期限を確認
         if: ${{ !inputs.dry_run }}
@@ -145,7 +153,7 @@ jobs:
 
       - name: 公開済みの更新と運用状態を Discord へ通知
         id: notify
-        if: ${{ always() && !cancelled() && !inputs.dry_run }}
+        if: ${{ always() && !cancelled() && !inputs.dry_run && steps.restore_notifications.outcome == 'success' }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.CLAUDE_UPDATES_DISCORD_WEBHOOK_URL }}
           FAILURE_TYPE: ${{ steps.generate_report.outputs.failure_type }}
@@ -169,6 +177,15 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
           python scripts/notification_delivery.py
+
+      - name: 送信確認を復元用成果物へ保存
+        if: ${{ always() && !inputs.dry_run && steps.restore_notifications.outcome == 'success' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: notification-checkpoint
+          path: reports/claude-code/notification-state.json
+          retention-days: 90
+          if-no-files-found: warn
 
       - name: 送信結果と障害の通知状態を保存
         if: ${{ always() && !inputs.dry_run }}

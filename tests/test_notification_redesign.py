@@ -255,3 +255,46 @@ def test_broken_incident_timestamp_requires_restoration(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError, match="復旧"):
         delivery.NotificationStore(path)
+
+
+def test_acknowledged_state_is_recovered_before_pending_replay(tmp_path: Path) -> None:
+    remote = delivery.NotificationStore(tmp_path / "remote.json")
+    remote.enqueue("v1", {"content": "更新1"})
+    checkpoint = delivery.NotificationStore(tmp_path / "artifact.json")
+    checkpoint.enqueue("v1", {"content": "更新1"})
+    checkpoint.enqueue("v2", {"content": "未公開の更新2"})
+    calls = []
+
+    def send(payload):
+        calls.append(payload)
+        if payload["content"] == "未公開の更新2":
+            raise RuntimeError("停止")
+        return "123"
+
+    with pytest.raises(RuntimeError):
+        checkpoint.deliver(send, published=True)
+    assert remote.merge_acknowledgements(checkpoint)
+    assert remote.data["pending"] == {}
+    assert remote.data["delivered"]["v1"]["message_id"] == "123"
+    assert "v2" not in remote.data["pending"]
+    remote.deliver(lambda payload: calls.append(payload) or "123", published=True)
+    assert len(calls) == 2
+    assert not remote.merge_acknowledgements(checkpoint)
+
+
+def test_recovered_incident_state_prevents_repeated_recovery(tmp_path: Path) -> None:
+    remote = delivery.NotificationStore(tmp_path / "remote.json")
+    checkpoint = delivery.NotificationStore(tmp_path / "artifact.json")
+    now = datetime(2026, 9, 26, tzinfo=timezone.utc)
+    remote.deliver(
+        lambda payload: "1", published=True, failure_type="groq_rate_limit", now=now
+    )
+    checkpoint.data = json.loads(json.dumps(remote.data))
+    checkpoint.deliver(
+        lambda payload: "2", published=True, now=now + timedelta(hours=1)
+    )
+    assert remote.merge_acknowledgements(checkpoint)
+    assert remote.data["incident"] is None
+    calls = []
+    remote.deliver(lambda payload: calls.append(payload) or "3", published=True)
+    assert calls == []

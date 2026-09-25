@@ -211,6 +211,25 @@ class NotificationStore:
     def save(self) -> None:
         atomic_json(self.path, self.data)
 
+    def merge_acknowledgements(self, checkpoint: NotificationStore) -> bool:
+        """未公開の送信待ちは復元せず、送信確認と新しい障害状態だけを取り込む。"""
+        before = json.dumps(self.data, sort_keys=True)
+        for key, acknowledgement in checkpoint.data["delivered"].items():
+            self.data["delivered"].setdefault(key, acknowledgement)
+            self.data["pending"].pop(key, None)
+        restored_at = checkpoint.data.get("incident_updated_at", "")
+        current_at = self.data.get("incident_updated_at", "")
+        if restored_at and (
+            not current_at
+            or datetime.fromisoformat(restored_at) > datetime.fromisoformat(current_at)
+        ):
+            self.data["incident"] = checkpoint.data["incident"]
+            self.data["incident_updated_at"] = restored_at
+        changed = before != json.dumps(self.data, sort_keys=True)
+        if changed:
+            self.save()
+        return changed
+
     def enqueue(
         self,
         version: str,
@@ -285,6 +304,7 @@ class NotificationStore:
                 }
             )
             self.data["incident"] = {"key": key, "sent_at": now.isoformat()}
+            self.data["incident_updated_at"] = now.isoformat()
             self.save()
         elif published and incident:
             send(
@@ -295,6 +315,7 @@ class NotificationStore:
                 }
             )
             self.data["incident"] = None
+            self.data["incident_updated_at"] = now.isoformat()
             self.save()
 
 
