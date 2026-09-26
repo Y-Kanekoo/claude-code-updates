@@ -1,54 +1,15 @@
 {
   "schema_version": 1,
-  "pending": {
+  "pending": {},
+  "delivered": {
     "v2.1.280": {
-      "payload": {
-        "allowed_mentions": {
-          "parse": []
-        },
-        "embeds": [
-          {
-            "title": "Claude Code v2.1.280｜次回更新時に確認",
-            "description": "114件の変更（新機能4件、改善16件、バグ修正53件、仕様変更7件、その他34件）。主な変更: PermissionRequest フックの動作が変更され、エージェントタイプのフックは実行されず、コマンド型または HTTP 型のフックを使うよう案内するエラーが表示されます。 / Claude Opus 5.5 がデフォルトモデルとして追加され、マウスサポートや設定項目の拡充、複数のバグ修正が行われました。",
-            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-09-22-v2.1.280.md",
-            "color": 15680580,
-            "fields": [
-              {
-                "name": "互換性の変更あり",
-                "value": "- エージェントタイプのフックが PermissionRequest で実行されなくなり、エラーが返されるため、既存のフック実装は互換性が失われます。",
-                "inline": false
-              },
-              {
-                "name": "必要な対応",
-                "value": "- `PermissionRequest` にエージェント型フックを設定している場合は、更新前にコマンド型または HTTP 型フックへの切り替えを確認してください。\n- 過去に保存した effort 設定を新モデルでも使いたい場合は、`/effort` でモデルごとの設定を確認してください。",
-                "inline": false
-              },
-              {
-                "name": "対象の使い方",
-                "value": "- `PermissionRequest` にエージェント型フックを設定している環境が対象です。\n- デフォルトモデル変更により、Opusモデルを使用する開発者は新しい料金体系とコンテキストサイズに注意が必要です。\n- Opus 5.5 以降のモデル利用者がデフォルト設定の変更に影響を受けます。",
-                "inline": false
-              },
-              {
-                "name": "主な変更",
-                "value": "- PermissionRequest フックでエージェントタイプのフックが無効化され、エラーが返されるようになりました。\n- Claude Opus 5.5 がデフォルトモデルとして追加されました。\n- `/effort` がモデル別設定になる前に保存した値は、Opus 5.5 などの新モデルに適用されなくなりました。",
-                "inline": false
-              },
-              {
-                "name": "詳細と原文",
-                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-09-22-v2.1.280.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.280)",
-                "inline": false
-              }
-            ],
-            "footer": {
-              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
-            },
-            "timestamp": "2026-09-22T16:38:14Z"
-          }
-        ]
-      },
-      "requires_publication": true
+      "message_id": "1553232397242212424",
+      "sent_at": "2026-09-26T02:31:01.019372+00:00"
     }
   },
-  "delivered": {},
-  "incident": null
+  "incident": {
+    "key": "groq_rate_limit:v2.1.281",
+    "sent_at": "2026-09-26T02:31:01.019372+00:00"
+  },
+  "incident_updated_at": "2026-09-26T02:31:01.019372+00:00"
 }
