@@ -149,7 +149,7 @@ jobs:
         if: >-
           ${{ always() && steps.commit_reports.outcome == 'success' &&
           steps.generate_index.outputs.has_reports == 'true' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: slides-trigger
           path: ${{ runner.temp }}/slides-trigger/version.txt
@@ -186,7 +186,7 @@ jobs:
 
       - name: 送信確認を復元用成果物へ保存
         if: ${{ always() && !inputs.dry_run && steps.restore_notifications.outcome == 'success' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: notification-checkpoint
           path: reports/claude-code/notification-state.json
@@ -210,7 +210,7 @@ jobs:
 
       - name: 検証用レポートと通知状態を保存
         if: ${{ always() && (inputs.dry_run || failure()) }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: report-preview
           path: reports/claude-code
