@@ -1,58 +1,14 @@
 {
   "schema_version": 1,
-  "pending": {
-    "v2.1.281": {
-      "payload": {
-        "allowed_mentions": {
-          "parse": []
-        },
-        "embeds": [
-          {
-            "title": "Claude Code v2.1.281｜即対応",
-            "description": "一部または全部の日本語要約を生成できず、原文を掲載しています。\n176件の変更（新機能9件、改善32件、バグ修正90件、仕様変更16件、削除1件、その他28件）。主な変更: 自己ホストランナーのシステムプロンプト渡し方式が変更され、互換性のあるフラグへの切り替えが必要です。 / 本リリースでは、/workflows の表示形式やリモートコントロールのダウンロード方式、MCP リソースリスト、プラグインアンインストールの通知、タスク一覧の操作、/agents メニュー項目の削除など、複数の仕様変更が行われました。",
-            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-09-23-v2.1.281.md",
-            "color": 15680580,
-            "fields": [
-              {
-                "name": "互換性の変更あり",
-                "value": "- 自己ホストランナーはシステムプロンプトの渡し方が変更されたため、既存の --system-prompt 系フラグは動作しなくなり、--system-prompt-file 系へ変更が必須になる。",
-                "inline": false
-              },
-              {
-                "name": "必要な対応",
-                "value": "- ラッパーや command フックを使用している場合、--system-prompt と --append-system-prompt をそれぞれ --system-prompt-file と --append-system-prompt-file に置き換えてください。",
-                "inline": false
-              },
-              {
-                "name": "対象の使い方",
-                "value": "- 自己ホストランナーの利用者は新しいフラグへの切り替えが必要になる。\n- /workflows の表示変更により、該当機能を利用するユーザーは新しいレイアウトに適応する必要があります。\n- API利用者はクラッシュや無限リトライのリスクが低減されます。",
-                "inline": false
-              },
-              {
-                "name": "主な変更",
-                "value": "- 自己ホストランナーがシステムプロンプトをプライベートファイルとして渡すよう変更され、大きなプロンプトでの起動失敗が解消された。\n- /workflows の各実行行がステータスアイコンと経過時間で先頭に表示され、端末が狭くなるとエージェント数とトークン数が省かれるようになりました。\n- desktopポリシーブロックに `blockReadsOutsideWorkingDirectories` と `disableBypassPermissionsMode` が追加されました。",
-                "inline": false
-              },
-              {
-                "name": "詳細と原文",
-                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-09-23-v2.1.281.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.281)",
-                "inline": false
-              }
-            ],
-            "footer": {
-              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
-            },
-            "timestamp": "2026-09-23T19:19:15Z"
-          }
-        ]
-      },
-      "requires_publication": true
-    }
-  },
+  "pending": {},
   "delivered": {
     "v2.1.280": {
       "message_id": "1553232397242212424",
       "sent_at": "2026-09-26T02:31:01.019372+00:00"
+    },
+    "v2.1.281": {
+      "message_id": "1553597503105007690",
+      "sent_at": "2026-09-27T02:41:49.110853+00:00"
     }
   },
   "incident": {
