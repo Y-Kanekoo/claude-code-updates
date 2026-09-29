@@ -19,6 +19,9 @@
       "sent_at": "2026-09-28T02:35:49.510245+00:00"
     }
   },
-  "incident": null,
-  "incident_updated_at": "2026-09-28T02:35:49.510245+00:00"
+  "incident": {
+    "key": "groq_rate_limit:v2.1.284",
+    "sent_at": "2026-09-29T03:15:38.496374+00:00"
+  },
+  "incident_updated_at": "2026-09-29T03:15:38.496374+00:00"
 }
