@@ -1,6 +1,44 @@
 {
   "schema_version": 1,
-  "pending": {},
+  "pending": {
+    "v2.1.284": {
+      "payload": {
+        "allowed_mentions": {
+          "parse": []
+        },
+        "embeds": [
+          {
+            "title": "Claude Code v2.1.284｜次回更新時に確認",
+            "description": "一部または全部の日本語要約を生成できず、原文を掲載しています。\n100件の変更（新機能9件、改善13件、バグ修正39件、仕様変更9件、その他30件）。主な変更: 今回のリリースでは、Claude Sonnet 5.5モデルの追加や自動モードの新回答、使用量表示のドル金額化、/effortスライダーのキー割り当て拡張、/rate-limit-optionsヘルプ掲載、そしてMCPサーバー再接続コマンドの導入など、複数の新機能が提供されました。 / Claude Codeは、Claude appsゲートウェイに利用可能モデル未設定時の起動警告、Google Cloudへのテレメトリ転送、証明書クライアント認証を追加し、レスポンスストリームやエラーハンドリングに関するバグを修正しました。",
+            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-09-28-v2.1.284.md",
+            "color": 16096779,
+            "fields": [
+              {
+                "name": "対象の使い方",
+                "value": "- Claude appsゲートウェイを利用する開発者が新機能の恩恵を受けます。\n- 開発者がArtifactツールやインタラクティブセッションを利用する際の操作フローが変わります。\n- `ANTHROPIC_FOUNDRY_RESOURCE` を使用する API 利用者が安全にリソース名を指定できます。",
+                "inline": false
+              },
+              {
+                "name": "主な変更",
+                "value": "- Claude Sonnet 5.5（claude-sonnet-5-5）をデフォルトモデルとして追加しました。\n- 利用可能モデルが未設定の場合に起動警告が表示されるようになりました。\n- Artifactツールがリンクやコンテンツを要求するよう改善され、停止せずに適切な入力を促すようになった。",
+                "inline": false
+              },
+              {
+                "name": "詳細と原文",
+                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-09-28-v2.1.284.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.284)",
+                "inline": false
+              }
+            ],
+            "footer": {
+              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
+            },
+            "timestamp": "2026-09-28T18:02:03Z"
+          }
+        ]
+      },
+      "requires_publication": true
+    }
+  },
   "delivered": {
     "v2.1.280": {
       "message_id": "1553232397242212424",
