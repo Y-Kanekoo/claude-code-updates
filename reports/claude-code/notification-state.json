@@ -1,6 +1,54 @@
 {
   "schema_version": 1,
-  "pending": {},
+  "pending": {
+    "v2.1.285": {
+      "payload": {
+        "allowed_mentions": {
+          "parse": []
+        },
+        "embeds": [
+          {
+            "title": "Claude Code v2.1.285｜次回更新時に確認",
+            "description": "136件の変更（新機能6件、改善15件、バグ修正60件、仕様変更20件、その他35件）。主な変更: 本リリースでは、権限モード未設定時の自動開始やサーバー名予約など、複数の仕様変更が行われました。 / 本リリースでは、WebFetch無効化やデスクトップ起動など、計6つの新機能が追加されました。",
+            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-09-29-v2.1.285.md",
+            "color": 15680580,
+            "fields": [
+              {
+                "name": "互換性の変更あり",
+                "value": "- `widgets` サーバー名が予約語となり、既存の `widgets` または類似名サーバーはロードできなくなるため、名前変更が必須です。\n- シンボリックリファレンスを持つブランチのチェックアウトが `/ultrareview` で拒否され、エラーメッセージが表示されます。\n- Windows の `env` から `ALLUSERSPROFILE`、`SystemDrive`、`CommonProgramFiles` が除外され、設定方法の変更が必要です。",
+                "inline": false
+              },
+              {
+                "name": "必要な対応",
+                "value": "- `/autocompact 200k` を実行してください。",
+                "inline": false
+              },
+              {
+                "name": "対象の使い方",
+                "value": "- `claude -p` と Python Agent SDK を使用する開発者が自動モードの挙動変更の影響を受けます。\n- バックグラウンドで長時間実行するスクリプトを使用する開発者に影響します。\n- macOS/Linux ユーザーが `/ultrareview` の git バージョン要件変更の影響を受けます",
+                "inline": false
+              },
+              {
+                "name": "主な変更",
+                "value": "- `claude -p` と Python Agent SDK が権限モード未設定時に自動モードで開始されるよう変更されました。\n- 環境変数 `CLAUDE_CODE_DISABLE_WEB_FETCH` でWebFetchツールを無効化できます。\n- バックグラウンドの Bash と PowerShell コマンドはデフォルト30分、最大2時間で自動停止し、Claude に通知されます。",
+                "inline": false
+              },
+              {
+                "name": "詳細と原文",
+                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-09-29-v2.1.285.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.285)",
+                "inline": false
+              }
+            ],
+            "footer": {
+              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
+            },
+            "timestamp": "2026-09-29T19:27:30Z"
+          }
+        ]
+      },
+      "requires_publication": true
+    }
+  },
   "delivered": {
     "v2.1.280": {
       "message_id": "1553232397242212424",
