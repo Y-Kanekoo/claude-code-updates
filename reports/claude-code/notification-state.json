@@ -1,6 +1,86 @@
 {
   "schema_version": 1,
-  "pending": {},
+  "pending": {
+    "v2.1.286": {
+      "payload": {
+        "allowed_mentions": {
+          "parse": []
+        },
+        "embeds": [
+          {
+            "title": "Claude Code v2.1.286｜次回更新時に確認",
+            "description": "一部または全部の日本語要約を生成できず、原文を掲載しています。\n88件の変更（新機能2件、改善14件、バグ修正36件、仕様変更12件、削除1件、その他23件）。主な変更: 今回のリリースでは、フック表示方法、テーマピッカー、/exit の動作、claude‑api の例、/ultrareview のブラウザリンク削除、そして Windows の信頼フォルダー問題がそれぞれ変更・削除・修正されました。 / 今回のリリースでは、権限プロンプトのカウント表示やフルスクリーンモードでのマウス操作追加などの新機能と、認証期限切れ時のブラウザ起動やツール呼び出し後のセッション復元問題などのバグ修正が行われました。",
+            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-09-30-v2.1.286.md",
+            "color": 16096779,
+            "fields": [
+              {
+                "name": "対象の使い方",
+                "value": "- CLI ユーザーはフック操作が簡略化され、作業効率が向上します。\n- CLI の `--bare` オプション利用者が接続先やタイムアウト動作の変更に注意が必要です。\n- プラグイン開発者はエラー原因が明示されるため、デバッグが容易になります。",
+                "inline": false
+              },
+              {
+                "name": "主な変更",
+                "value": "- `/hooks` がイベント別にグループ化された1つのリストで開くようになり、フックの表示に必要なEnter回数が3回から1回に減少しました。\n- 権限プロンプトに要求番号と総数が表示され、ユーザーが進行状況を把握しやすくなりました。\n- フック詳細画面の閉じる文言が \"it\" から \"this hook\" に変更されました。",
+                "inline": false
+              },
+              {
+                "name": "詳細と原文",
+                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-09-30-v2.1.286.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.286)",
+                "inline": false
+              }
+            ],
+            "footer": {
+              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
+            },
+            "timestamp": "2026-09-30T19:10:13Z"
+          }
+        ]
+      },
+      "requires_publication": true
+    },
+    "v2.1.287": {
+      "payload": {
+        "allowed_mentions": {
+          "parse": []
+        },
+        "embeds": [
+          {
+            "title": "Claude Code v2.1.287｜次回更新時に確認",
+            "description": "106件の変更（新機能5件、改善16件、バグ修正50件、仕様変更9件、その他26件）。主な変更: 今回のリリースでは、プラグインの拡張やエージェントビューのフィルタ追加、OpenTelemetry イベントへの情報追加など、複数の新機能が導入されました。 / 複数の機能で既定動作が変更されました。",
+            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-01-v2.1.287.md",
+            "color": 16096779,
+            "fields": [
+              {
+                "name": "必要な対応",
+                "value": "- `/plugin enable cc-plugin-you-should-know@builtin` コマンドで「You should know」モッドを有効化してください。\n- `CLAUDE_CODE_DISABLE_1M_CONTEXT=1` を設定すると、デフォルトの1Mコンテキストウィンドウを200Kに戻せます。\n- MCP サーバーが接続できなくなった場合、設定エントリに `bareElicitationCapability: true` を追加してください。",
+                "inline": false
+              },
+              {
+                "name": "対象の使い方",
+                "value": "- デフォルトコンテキストが拡大されるため、メモリ使用量が増加し、古い環境での互換性に影響する可能性があります。\n- ヘッドレスモードでMCPを使用する開発者に影響します。\n- Claude Desktop ユーザーは `/desktop` コマンドのエラー情報が明確になり、デバッグが容易になります。",
+                "inline": false
+              },
+              {
+                "name": "主な変更",
+                "value": "- プラグインがより深い動作を変更できるようになりました。\n- Opus 4.7+ と Fable のデフォルトコンテキストウィンドウが1Mに拡大されました。\n- フラグ付きメッセージ後の自動モデル切替が、現在の努力レベルを維持するよう変更されました。",
+                "inline": false
+              },
+              {
+                "name": "詳細と原文",
+                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-01-v2.1.287.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.287)",
+                "inline": false
+              }
+            ],
+            "footer": {
+              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
+            },
+            "timestamp": "2026-10-01T18:00:22Z"
+          }
+        ]
+      },
+      "requires_publication": true
+    }
+  },
   "delivered": {
     "v2.1.280": {
       "message_id": "1553232397242212424",
