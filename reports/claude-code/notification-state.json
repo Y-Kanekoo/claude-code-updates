@@ -1,44 +1,6 @@
 {
   "schema_version": 1,
-  "pending": {
-    "v2.1.288": {
-      "payload": {
-        "allowed_mentions": {
-          "parse": []
-        },
-        "embeds": [
-          {
-            "title": "Claude Code v2.1.288｜次回更新時に確認",
-            "description": "一部または全部の日本語要約を生成できず、原文を掲載しています。\n89件の変更（新機能7件、改善9件、バグ修正58件、仕様変更6件、その他9件）。主な変更: 新機能の追加と複数のバグ修正により、スクリーンリーダー対応やセッション再開の信頼性が向上しました。 / 本リリースでは、選択テキスト取得機能や API 追加、プロンプト復元など、複数の新機能が導入されました。",
-            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-02-v2.1.288.md",
-            "color": 16096779,
-            "fields": [
-              {
-                "name": "対象の使い方",
-                "value": "- スクリーンリーダーユーザーが新しい権限モードの案内を音声で受け取れるようになります。\n- モデルごとの自動コンパクト設定を利用するユーザーに影響。\n- サブエージェントのファイルアクセス機能を使用する開発者に影響します。",
-                "inline": false
-              },
-              {
-                "name": "主な変更",
-                "value": "- プラン承認時にスクリーンリーダーモードで新しい権限モードが案内されるようになりました。\n- `$.ui.selection()` が追加され、フルスクリーンモードで最後に選択したテキストや行単位の取得が可能になりました。\n- `/autocompact` がモデル別設定に変更され、設定保持が向上。",
-                "inline": false
-              },
-              {
-                "name": "詳細と原文",
-                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-02-v2.1.288.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.288)",
-                "inline": false
-              }
-            ],
-            "footer": {
-              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
-            },
-            "timestamp": "2026-10-02T20:19:57Z"
-          }
-        ]
-      },
-      "requires_publication": true
-    }
-  },
+  "pending": {},
   "delivered": {
     "v2.1.280": {
       "message_id": "1553232397242212424",
@@ -71,6 +33,10 @@
     "v2.1.287": {
       "message_id": "1555418115632926764",
       "sent_at": "2026-10-02T03:16:16.672186+00:00"
+    },
+    "v2.1.288": {
+      "message_id": "1555775071534981121",
+      "sent_at": "2026-10-03T02:54:41.635008+00:00"
     }
   },
   "incident": null,
