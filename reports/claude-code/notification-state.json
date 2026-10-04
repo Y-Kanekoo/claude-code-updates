@@ -1,44 +1,6 @@
 {
   "schema_version": 1,
-  "pending": {
-    "v2.1.289": {
-      "payload": {
-        "allowed_mentions": {
-          "parse": []
-        },
-        "embeds": [
-          {
-            "title": "Claude Code v2.1.289｜次回更新時に確認",
-            "description": "一部または全部の日本語要約を生成できず、原文を掲載しています。\n27件の変更（新機能1件、改善2件、バグ修正23件、その他1件）。主な変更: 本リリースでは、プラグイン領域や Bash ルール、ui.render フックに関する複数のバグを修正し、agent.spawn とエージェント状態取得機能を新たに追加しました。 / Groqによる構造化要約を生成できなかったため、公式リリースノートの変更項目を原文のまま掲載します。",
-            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-03-v2.1.289.md",
-            "color": 16096779,
-            "fields": [
-              {
-                "name": "対象の使い方",
-                "value": "- プラグイン開発者は、バグ修正により安定したセッション管理が可能になります。\n- モッド開発者が描画失敗の原因を特定しやすくなります。\n- プラグインを利用するエンドユーザーが安定した動作を得られます",
-                "inline": false
-              },
-              {
-                "name": "主な変更",
-                "value": "- agent.spawn とエージェント状態取得機能が追加され、チーム連携が強化されました。\n- バンドやパネルが描画されない際の表示が改善されました。\n- アップグレード後の最初のセッションでモッドがロードされない不具合を修正しました",
-                "inline": false
-              },
-              {
-                "name": "詳細と原文",
-                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-03-v2.1.289.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.289)",
-                "inline": false
-              }
-            ],
-            "footer": {
-              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
-            },
-            "timestamp": "2026-10-03T23:07:17Z"
-          }
-        ]
-      },
-      "requires_publication": true
-    }
-  },
+  "pending": {},
   "delivered": {
     "v2.1.280": {
       "message_id": "1553232397242212424",
@@ -75,6 +37,10 @@
     "v2.1.288": {
       "message_id": "1555775071534981121",
       "sent_at": "2026-10-03T02:54:41.635008+00:00"
+    },
+    "v2.1.289": {
+      "message_id": "1556143679486304258",
+      "sent_at": "2026-10-04T03:19:24.754535+00:00"
     }
   },
   "incident": null,
