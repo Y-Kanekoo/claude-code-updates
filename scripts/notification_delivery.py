@@ -250,6 +250,8 @@ class NotificationStore:
         send: Callable[[Mapping[str, object]], str],
         *,
         published: bool,
+        reports_published: bool = False,
+        checkpoints_saved: bool = False,
         deferred: bool = False,
         failure_type: str = "",
         failed_version: str = "",
@@ -284,13 +286,19 @@ class NotificationStore:
                 f"**次の対応**: {action}",
                 f"未送信の更新通知: {len(self.data['pending'])}件",
             ]
-            if published:
+            if reports_published:
                 lines.append(
-                    "公開済みの途中進捗は保持され、次回実行で続きから再開します。"
+                    "今回完成したレポートを公開しました。未完了分は次回実行で再開します。"
                 )
+            elif published:
+                lines.append("今回、新しいレポートは公開していません。")
             else:
                 lines.append(
                     "今回のレポート公開は未確認です。更新通知は保留しています。"
+                )
+            if checkpoints_saved:
+                lines.append(
+                    "生成途中のチェックポイントを保存しました。途中進捗は保持され、次回実行で続きから再開します。"
                 )
             if kind == "groq_rate_limit":
                 lines.append(
@@ -397,7 +405,9 @@ def main() -> int:
         store = NotificationStore(REPORTS_DIR / STATE_NAME)
         store.deliver(
             lambda payload: post_webhook(webhook_url, payload),
-            published=os.getenv("REPORTS_PUBLISHED") == "true",
+            published=os.getenv("REPORTS_AVAILABLE") == "true",
+            reports_published=os.getenv("REPORTS_PUBLISHED") == "true",
+            checkpoints_saved=os.getenv("CHECKPOINTS_SAVED") == "true",
             deferred=os.getenv("RUN_DEFERRED") == "true",
             failure_type=os.getenv("FAILURE_TYPE", "")
             if os.getenv("RUN_FAILED") != "true"

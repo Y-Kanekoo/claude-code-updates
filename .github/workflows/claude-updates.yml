@@ -132,13 +132,28 @@ jobs:
             echo "ステージ対象のレポート変更がないため、コミットをスキップします"
             exit 0
           fi
-          git commit -m "[docs] Claude Code ${{ steps.check_changes.outputs.version }} の更新レポートを追加"
+          reports_published=false
+          checkpoints_saved=false
+          if [[ -n "$(git diff --cached --name-only --diff-filter=AM -- 'reports/claude-code/*-v*.md')" ]]; then
+            reports_published=true
+          fi
+          if [[ -n "$(git diff --cached --name-only --diff-filter=AM -- reports/claude-code/summary-cache)" ]]; then
+            checkpoints_saved=true
+          fi
+          if [[ "$reports_published" == 'true' ]]; then
+            git commit -m "[docs] Claude Code ${{ steps.check_changes.outputs.version }} の更新レポートを追加"
+          else
+            git commit -m "[ops] レポート生成のチェックポイント・運用状態を保存"
+          fi
           git push
+          # Only acknowledge durable changes after push succeeds.
+          printf '%s\n' "pushed=true" "reports_published=$reports_published" \
+            "checkpoints_saved=$checkpoints_saved" >> "$GITHUB_OUTPUT"
 
       - name: スライド更新トリガーを記録
         if: >-
           ${{ always() && steps.commit_reports.outcome == 'success' &&
-          steps.generate_index.outputs.has_reports == 'true' }}
+          steps.commit_reports.outputs.reports_published == 'true' }}
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/slides-trigger"
@@ -148,7 +163,7 @@ jobs:
       - name: スライド更新トリガーを保存
         if: >-
           ${{ always() && steps.commit_reports.outcome == 'success' &&
-          steps.generate_index.outputs.has_reports == 'true' }}
+          steps.commit_reports.outputs.reports_published == 'true' }}
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: slides-trigger
@@ -165,9 +180,11 @@ jobs:
           FAILED_VERSION: ${{ steps.generate_report.outputs.failed_version }}
           RUN_FAILED: ${{ job.status == 'failure' }}
           RUN_DEFERRED: ${{ steps.generate_report.outputs.deferred }}
-          REPORTS_PUBLISHED: >-
+          REPORTS_AVAILABLE: >-
             ${{ steps.generate_index.outcome == 'success' &&
-            (steps.commit_reports.outcome == 'success' || steps.check_changes.outputs.has_changes == 'false') }}
+            (steps.commit_reports.outputs.pushed == 'true' || steps.check_changes.outputs.has_changes == 'false') }}
+          REPORTS_PUBLISHED: ${{ steps.commit_reports.outputs.reports_published == 'true' }}
+          CHECKPOINTS_SAVED: ${{ steps.commit_reports.outputs.checkpoints_saved == 'true' }}
           ACTIONS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           GROQ_LIMITS_URL: https://console.groq.com/settings/limits
           GROQ_BILLING_URL: https://console.groq.com/settings/billing/manage
@@ -176,7 +193,12 @@ jobs:
             {
               echo '## Groq APIの利用上限に到達しました'
               if [[ "$REPORTS_PUBLISHED" == 'true' ]]; then
-                echo '途中進捗は保持され、次回実行で続きから再開します。'
+                echo '今回完成したレポートを公開しました。未完了分は次回実行で再開します。'
+              else
+                echo '今回、新しいレポートは公開していません。'
+              fi
+              if [[ "$CHECKPOINTS_SAVED" == 'true' ]]; then
+                echo '生成途中のチェックポイントを保存しました。途中進捗は保持され、次回実行で続きから再開します。'
               fi
               echo "[利用上限]($GROQ_LIMITS_URL) / [料金設定（変更は任意）]($GROQ_BILLING_URL)"
               echo "[Actionsログを確認]($ACTIONS_RUN_URL)"
