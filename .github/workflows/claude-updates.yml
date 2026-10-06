@@ -147,9 +147,8 @@ jobs:
           fi
           git push
           # Only acknowledge durable changes after push succeeds.
-          echo "pushed=true" >> "$GITHUB_OUTPUT"
-          echo "reports_published=$reports_published" >> "$GITHUB_OUTPUT"
-          echo "checkpoints_saved=$checkpoints_saved" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "pushed=true" "reports_published=$reports_published" \
+            "checkpoints_saved=$checkpoints_saved" >> "$GITHUB_OUTPUT"
 
       - name: スライド更新トリガーを記録
         if: >-
