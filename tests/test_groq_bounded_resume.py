@@ -82,6 +82,7 @@ def test_checkpoint_resume_with_actual_retry_and_deadline(tmp_path, monkeypatch,
     clock = [0.0]
     calls = []
     monkeypatch.setattr(updates.time, 'monotonic', lambda: clock[0])
+    monkeypatch.setattr(updates.time, 'time', lambda: clock[0])
     monkeypatch.setattr(updates.time, 'sleep', lambda delay: clock.__setitem__(0, clock[0] + delay))
 
     def create(**kwargs):
@@ -102,10 +103,155 @@ def test_checkpoint_resume_with_actual_retry_and_deadline(tmp_path, monkeypatch,
 
     with pytest.raises(updates.ProcessingDeferred):
         checker(65).summarize_release_notes(notes, 'v1.2.3')
-    assert len(list(cache.glob('*.json'))) == 17
-    before = {p.name: p.read_bytes() for p in cache.glob('*.json')}
-    result = checker(1200).summarize_release_notes(notes, 'v1.2.3')
+    assert len(list(cache.glob('v*.json'))) == 17
+    before = {p.name: p.read_bytes() for p in cache.glob('v*.json')}
+    calls_before = len(calls)
+    with pytest.raises(updates.ProcessingDeferred):
+        checker(clock[0] + 1200).summarize_release_notes(notes, 'v1.2.3')
+    assert len(calls) == calls_before
+    clock[0] += server_delay
+    result = checker(clock[0] + 1200).summarize_release_notes(notes, 'v1.2.3')
     assert len(calls) == 33  # 17成功+1失敗+残り15。完了分への追加callなし。
     assert calls[18] == 'R103'
     assert all((cache / name).read_bytes() == data for name, data in before.items())
     assert all(f'<!-- sources:R{i} -->' in result for i in range(1, 193))
+
+
+def test_retry_after_survives_new_process_state_until_exact_deadline(tmp_path, monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(updates.time, 'time', lambda: now[0])
+    waits = []
+    monkeypatch.setattr(updates.time, 'sleep', waits.append)
+    calls = []
+
+    def new_checker():
+        obj = object.__new__(updates.ReleaseChecker)
+        obj.summary_cache_dir = tmp_path / 'summary-cache'
+        return obj
+
+    def limited():
+        calls.append('limited')
+        raise RateLimit(90000)
+
+    with pytest.raises(updates.ProcessingDeferred):
+        new_checker()._call_groq_api(limited, 'summary')
+    state = tmp_path / 'summary-cache/groq-not-before.json'
+    assert state.is_file()
+    payload = json.loads(state.read_text())
+    assert payload == {'schema_version': 1, 'not_before': 91000.0}
+    for current in (1000, 87400, 90999.99):
+        now[0] = current
+        with pytest.raises(updates.ProcessingDeferred):
+            new_checker()._call_groq_api(lambda: calls.append('early'), 'authentication')
+    assert calls == ['limited'] and waits == []
+    now[0] = 91000
+    assert new_checker()._call_groq_api(lambda: 'resumed', 'summary') == 'resumed'
+
+
+@pytest.mark.parametrize('data', ['{', '{"schema_version":true,"not_before":9000}', '{"schema_version":1,"not_before":"9000"}', '{"schema_version":1,"not_before":NaN}', '{"schema_version":1,"not_before":9000,"extra":1}'])
+def test_invalid_cooldown_never_calls_provider(tmp_path, monkeypatch, data):
+    checker = object.__new__(updates.ReleaseChecker)
+    checker.summary_cache_dir = tmp_path
+    (tmp_path / 'groq-not-before.json').write_text(data)
+    calls = []
+    with pytest.raises(ValueError):
+        checker._call_groq_api(lambda: calls.append(1), 'summary')
+    assert calls == []
+
+
+def test_cooldown_write_failure_stops_without_retry(tmp_path, monkeypatch):
+    checker = object.__new__(updates.ReleaseChecker)
+    checker.summary_cache_dir = tmp_path
+    monkeypatch.setattr(updates, '_atomic_write_text', lambda *a: (_ for _ in ()).throw(OSError('disk unavailable')))
+    calls = []
+    def operation():
+        calls.append(1)
+        raise RateLimit(3600)
+    with pytest.raises(OSError):
+        checker._call_groq_api(operation, 'summary')
+    assert calls == [1]
+
+
+def test_cooldown_checkpoint_roundtrip_through_workflow_and_fresh_process(tmp_path, monkeypatch):
+    import os
+    import subprocess
+    import sys
+    from test_publication_status import git, step_script
+
+    remote = tmp_path / 'remote.git'
+    git(tmp_path, 'init', '--bare', str(remote))
+    root = tmp_path / 'repo'
+    root.mkdir()
+    git(root, 'init', '-b', 'main')
+    git(root, 'config', 'user.name', 'Test')
+    git(root, 'config', 'user.email', 'test@example.invalid')
+    reports = root / 'reports/claude-code'
+    reports.mkdir(parents=True)
+    (reports / 'last-checked.json').write_text('{"last_version":"v2.1.289"}')
+    git(root, 'add', '.')
+    git(root, 'commit', '-m', 'baseline')
+    git(root, 'remote', 'add', 'origin', str(remote))
+    git(root, 'push', '-u', 'origin', 'main')
+    checker = object.__new__(updates.ReleaseChecker)
+    checker.summary_cache_dir = reports / 'summary-cache'
+    monkeypatch.setattr(updates.time, 'time', lambda: 1000)
+    with pytest.raises(updates.ProcessingDeferred):
+        checker._call_groq_api(lambda: (_ for _ in ()).throw(RateLimit(90000)), 'summary')
+    original = (checker.summary_cache_dir / 'groq-not-before.json').read_bytes()
+    output = tmp_path / 'output'
+    output.touch()
+    env = {**os.environ, 'GITHUB_OUTPUT': str(output)}
+    script = step_script('変更をコミット＆プッシュ').replace('${{ steps.check_changes.outputs.version }}', 'v2.1.289')
+    subprocess.run(['bash', '-e', '-c', script], cwd=root, env=env, capture_output=True, check=True)
+    status = dict(line.split('=', 1) for line in output.read_text().splitlines())
+    assert status == {'pushed':'true', 'reports_published':'false', 'checkpoints_saved':'true'}
+    next_root = tmp_path / 'next'
+    git(tmp_path, 'clone', '--branch', 'main', str(remote), str(next_root))
+    cache = next_root / 'reports/claude-code/summary-cache'
+    assert (cache / 'groq-not-before.json').read_bytes() == original
+    driver = '''
+import importlib.util,sys
+from pathlib import Path
+sys.path.insert(0, str(Path(sys.argv[1]).parent))
+spec=importlib.util.spec_from_file_location("fresh",sys.argv[1]);m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+x=object.__new__(m.ReleaseChecker);x.summary_cache_dir=Path(sys.argv[2]);m.time.time=lambda:float(sys.argv[3])
+calls=[]
+try:
+ x._call_groq_api(lambda:calls.append(1),"authentication")
+except m.ProcessingDeferred:
+ assert not calls
+ print("deferred")
+else:
+ assert calls==[1]
+ print("resumed")
+'''
+    for now, expected in ((87400, 'deferred'), (90999.99, 'deferred'), (91000, 'resumed')):
+        result = subprocess.run([sys.executable, '-c', driver, str(ROOT / 'scripts/check-claude-updates.py'), str(cache), str(now)], capture_output=True, text=True, check=True)
+        assert result.stdout.strip() == expected
+
+
+@pytest.mark.parametrize('daily', [False, True])
+def test_failed_429_also_preserves_retry_deadline(tmp_path, monkeypatch, daily):
+    checker = object.__new__(updates.ReleaseChecker)
+    checker.summary_cache_dir = tmp_path
+    monkeypatch.setattr(updates.time, 'time', lambda: 1000)
+    monkeypatch.setattr(updates.time, 'sleep', lambda delay: None)
+    calls = []
+
+    def operation():
+        calls.append(1)
+        error = RateLimit(5)
+        if daily:
+            error.response.headers = {'x-ratelimit-reset-requests':'2h', 'x-ratelimit-remaining-requests':'0'}
+        raise error
+
+    with pytest.raises(updates.GroqRateLimitError):
+        checker._call_groq_api(operation, 'summary')
+    assert len(calls) == (1 if daily else 3)
+    saved = json.loads((tmp_path / 'groq-not-before.json').read_text())
+    assert saved['not_before'] == (8200 if daily else 1005)
+    next_checker = object.__new__(updates.ReleaseChecker)
+    next_checker.summary_cache_dir = tmp_path
+    with pytest.raises(updates.ProcessingDeferred):
+        next_checker._call_groq_api(lambda: calls.append('unexpected'), 'authentication')
+    assert 'unexpected' not in calls

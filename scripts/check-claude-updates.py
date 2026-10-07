@@ -514,12 +514,55 @@ class ReleaseChecker:
         """環境変数対応後も旧テスト用インスタンスと互換なモデルIDを返す。"""
         return getattr(self, "llm_model", LLM_MODEL)
 
+    def _groq_not_before(self) -> float:
+        """共有checkpointの期限を読み、壊れた状態はAPIを呼ばず拒否する。"""
+        cache_dir = getattr(self, "summary_cache_dir", None)
+        if cache_dir is None:
+            return 0.0
+        path = cache_dir / "groq-not-before.json"
+        try:
+            with path.open("rb") as stream:
+                raw = stream.read(4097)
+        except FileNotFoundError:
+            return 0.0
+        if len(raw) > 4096:
+            raise ValueError("Groq待機状態が不正です")
+        payload = json.loads(raw)
+        if (
+            not isinstance(payload, dict)
+            or set(payload) != {"schema_version", "not_before"}
+            or type(payload["schema_version"]) is not int
+            or payload["schema_version"] != 1
+            or type(payload["not_before"]) not in (int, float)
+            or self._parse_non_negative_number(payload["not_before"]) is None
+        ):
+            raise ValueError("Groq待機状態が不正です")
+        return float(payload["not_before"])
+
+    def _save_groq_not_before(self, error: Exception) -> None:
+        """延期・試行枯渇時の待機指示を既存checkpoint保存経路へ載せる。"""
+        delay = self._extract_retry_delay_seconds(error)
+        cache_dir = getattr(self, "summary_cache_dir", None)
+        if cache_dir is None or delay is None or delay <= 0:
+            return
+        deadline = max(self._groq_not_before(), time.time() + delay)
+        if not math.isfinite(deadline):
+            raise ValueError("Groq待機期限が不正です")
+        _atomic_write_text(
+            cache_dir / "groq-not-before.json",
+            json.dumps({"schema_version": 1, "not_before": deadline}),
+        )
+
     def _call_groq_api(
         self,
         operation: Callable[[], T],
         operation_name: str,
     ) -> T:
         """再試行対象を接続障害・429・5xxに限定してGroq APIを呼ぶ。"""
+        if time.time() < self._groq_not_before():
+            raise ProcessingDeferred(
+                "Groqの保存済み待機期限前のため、APIを呼ばず次回へ延期します。"
+            )
         previous_rate_limit_delay = 0.0
         for attempt in range(1, GROQ_MAX_ATTEMPTS + 1):
             deadline = getattr(self, "processing_deadline", float("inf"))
@@ -545,6 +588,7 @@ class ReleaseChecker:
                     or self._is_groq_connection_error(e)
                 )
                 if status_code == 429 and attempt == GROQ_MAX_ATTEMPTS:
+                    self._save_groq_not_before(e)
                     raise GroqRateLimitError(
                         "Groq APIのレート制限が再試行後も継続したため、"
                         "この実行を停止します"
@@ -557,11 +601,13 @@ class ReleaseChecker:
                     server_delay = self._extract_retry_delay_seconds(e)
                     if server_delay is not None:
                         if self._is_long_reset_delay(e, server_delay):
+                            self._save_groq_not_before(e)
                             raise GroqRateLimitError(
                                 "Groq APIのレート制限解除まで60秒を超えるため、"
                                 "この実行での再試行を停止します"
                             ) from e
                         if server_delay > GROQ_MAX_RETRY_DELAY_SECONDS:
+                            self._save_groq_not_before(e)
                             raise ProcessingDeferred(
                                 "Groqの待機指示が60秒を超えるため、早期再送せず"
                                 "完了した分割要約を保存して次回再開します。"
@@ -579,6 +625,8 @@ class ReleaseChecker:
                     )
                     previous_rate_limit_delay = delay_seconds
                 if time.monotonic() + delay_seconds + GROQ_REQUEST_TIMEOUT_SECONDS >= deadline:
+                    if status_code == 429:
+                        self._save_groq_not_before(e)
                     raise ProcessingDeferred(
                         "再試行の待機とAPI応答が処理時間の上限に収まらないため、"
                         "完了した分割要約を保存して次回再開します。"
