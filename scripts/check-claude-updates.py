@@ -89,6 +89,7 @@ DEFAULT_MAX_RELEASES_PER_RUN = 10
 MAX_RELEASES_PER_RUN_LIMIT = 10
 GITHUB_RELEASES_PER_PAGE = 100
 GITHUB_RELEASES_MAX_PAGES = 10
+GROQ_REQUEST_TIMEOUT_SECONDS = 45.0
 GROQ_MAX_ATTEMPTS = 3
 GROQ_RETRY_BASE_DELAY_SECONDS = 1.0
 GROQ_RETRY_BUFFER_SECONDS = 0.5
@@ -201,7 +202,7 @@ class ReleaseChecker:
             raise ImportError("groq パッケージがインストールされていません")
 
         # Groq APIの設定
-        self.client = Groq(api_key=self.groq_api_key, max_retries=0, timeout=45)
+        self.client = Groq(api_key=self.groq_api_key, max_retries=0, timeout=GROQ_REQUEST_TIMEOUT_SECONDS)
         self.processing_deadline = time.monotonic() + 20 * 60
 
         # GitHub APIトークン（任意）
@@ -519,8 +520,10 @@ class ReleaseChecker:
         operation_name: str,
     ) -> T:
         """再試行対象を接続障害・429・5xxに限定してGroq APIを呼ぶ。"""
+        previous_rate_limit_delay = 0.0
         for attempt in range(1, GROQ_MAX_ATTEMPTS + 1):
-            if time.monotonic() >= getattr(self, "processing_deadline", float("inf")):
+            deadline = getattr(self, "processing_deadline", float("inf"))
+            if time.monotonic() + GROQ_REQUEST_TIMEOUT_SECONDS >= deadline:
                 raise ProcessingDeferred("処理時間の上限に達したため、完了した分割要約を保存して次回再開します。")
             try:
                 return operation()
@@ -558,11 +561,28 @@ class ReleaseChecker:
                                 "Groq APIのレート制限解除まで60秒を超えるため、"
                                 "この実行での再試行を停止します"
                             ) from e
+                        if server_delay > GROQ_MAX_RETRY_DELAY_SECONDS:
+                            raise ProcessingDeferred(
+                                "Groqの待機指示が60秒を超えるため、早期再送せず"
+                                "完了した分割要約を保存して次回再開します。"
+                            ) from e
                         delay_seconds = min(
                             max(delay_seconds, server_delay)
                             + GROQ_RETRY_BUFFER_SECONDS,
                             GROQ_MAX_RETRY_DELAY_SECONDS,
                         )
+                if status_code == 429:
+                    # 残枠の変動で短い指示が返っても、連続失敗時のbackoffを縮めない。
+                    delay_seconds = max(
+                        delay_seconds,
+                        min(previous_rate_limit_delay * 2, GROQ_MAX_RETRY_DELAY_SECONDS),
+                    )
+                    previous_rate_limit_delay = delay_seconds
+                if time.monotonic() + delay_seconds + GROQ_REQUEST_TIMEOUT_SECONDS >= deadline:
+                    raise ProcessingDeferred(
+                        "再試行の待機とAPI応答が処理時間の上限に収まらないため、"
+                        "完了した分割要約を保存して次回再開します。"
+                    ) from e
                 reason = (
                     f"HTTP {status_code}"
                     if status_code is not None
