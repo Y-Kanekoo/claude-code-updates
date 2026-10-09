@@ -1,76 +1,6 @@
 {
   "schema_version": 1,
-  "pending": {
-    "v2.1.290": {
-      "payload": {
-        "allowed_mentions": {
-          "parse": []
-        },
-        "embeds": [
-          {
-            "title": "Claude Code v2.1.290｜次回更新時に確認",
-            "description": "一部または全部の日本語要約を生成できず、原文を掲載しています。\n190件の変更（新機能11件、改善15件、バグ修正112件、仕様変更22件、その他30件）。主な変更: 本リリースでは、mod フックへの新情報追加、プラグイン型定義の拡張、サインイン承認ページの Deny ボタン導入など、複数の新機能が提供されました。 / 今回のリリースでは、セッション名でのコマンド指定やマネージドエージェントのオンボーディング機能追加、設定ファイルの警告表示、プロキシ環境でのリクエスト不具合修正が行われました。",
-            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-05-v2.1.290.md",
-            "color": 16096779,
-            "fields": [
-              {
-                "name": "対象の使い方",
-                "value": "- プラグイン開発者は新しいフック情報を利用して、ツール呼び出しや権限チェックを詳細に管理できます。\n- プロンプト操作を頻繁に行うユーザー\n- リポジトリ設定から添付ファイル無効化ができなくなるため、既存設定が無効になる可能性があります。",
-                "inline": false
-              },
-              {
-                "name": "主な変更",
-                "value": "- `serverToolUses` が mod の `turn.step` フックに追加され、ツール呼び出しの詳細が取得可能になりました。\n- セッション名で `claude attach` と `claude logs` が使用可能になりました。\n- バックグラウンドデーモンのログが、複数行メッセージを1つのJSON引用行として出力されるようになりました。",
-                "inline": false
-              },
-              {
-                "name": "詳細と原文",
-                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-05-v2.1.290.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.290)",
-                "inline": false
-              }
-            ],
-            "footer": {
-              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
-            },
-            "timestamp": "2026-10-05T23:33:17Z"
-          }
-        ]
-      },
-      "requires_publication": true
-    },
-    "v2.1.291": {
-      "payload": {
-        "allowed_mentions": {
-          "parse": []
-        },
-        "embeds": [
-          {
-            "title": "Claude Code v2.1.291｜次回更新時に確認",
-            "description": "2.1.290および2.1.288での回帰バグを修正し、クラウドセッションの権限プロンプト回答ドロップとセッション終了時のメッセージ消失を防止しました。",
-            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-06-v2.1.291.md",
-            "color": 9133302,
-            "fields": [
-              {
-                "name": "主な変更",
-                "value": "- 2.1.290でクラウドセッションが権限プロンプトへの回答を失うバグを修正。\n- 2.1.288でセッション終了時に最後のメッセージが失われるバグを修正。",
-                "inline": false
-              },
-              {
-                "name": "詳細と原文",
-                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-06-v2.1.291.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.291)",
-                "inline": false
-              }
-            ],
-            "footer": {
-              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
-            },
-            "timestamp": "2026-10-06T03:55:19Z"
-          }
-        ]
-      },
-      "requires_publication": true
-    }
-  },
+  "pending": {},
   "delivered": {
     "v2.1.280": {
       "message_id": "1553232397242212424",
@@ -111,11 +41,19 @@
     "v2.1.289": {
       "message_id": "1556143679486304258",
       "sent_at": "2026-10-04T03:19:24.754535+00:00"
+    },
+    "v2.1.290": {
+      "message_id": "1557961161167601705",
+      "sent_at": "2026-10-09T03:41:26.248857+00:00"
+    },
+    "v2.1.291": {
+      "message_id": "1557961162182623294",
+      "sent_at": "2026-10-09T03:41:26.248857+00:00"
     }
   },
   "incident": {
-    "key": "groq_rate_limit:v2.1.290",
-    "sent_at": "2026-10-06T03:52:21.543129+00:00"
+    "key": "groq_rate_limit:v2.1.292",
+    "sent_at": "2026-10-09T03:41:26.248857+00:00"
   },
-  "incident_updated_at": "2026-10-06T03:52:21.543129+00:00"
+  "incident_updated_at": "2026-10-09T03:41:26.248857+00:00"
 }
