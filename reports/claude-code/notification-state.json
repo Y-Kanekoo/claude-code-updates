@@ -1,6 +1,49 @@
 {
   "schema_version": 1,
-  "pending": {},
+  "pending": {
+    "v2.1.292": {
+      "payload": {
+        "allowed_mentions": {
+          "parse": []
+        },
+        "embeds": [
+          {
+            "title": "Claude Code v2.1.292｜次回更新時に確認",
+            "description": "一部または全部の日本語要約を生成できず、原文を掲載しています。\n92件の変更（新機能6件、改善12件、バグ修正52件、仕様変更5件、その他17件）。主な変更: 今回のリリースでは、プラグインインストール時のマーケットプレイス指定やエージェントの努力レベル設定、リトライ遅延環境変数など、複数の新機能が追加されました。 / Groqによる構造化要約を生成できなかったため、公式リリースノートの変更項目を原文のまま掲載します。",
+            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-06-v2.1.292.md",
+            "color": 9133302,
+            "fields": [
+              {
+                "name": "必要な対応",
+                "value": "- `MCP_PROTOCOL_NEGOTIATION=legacy` を環境変数に設定して旧プロトコルを使用するか、変更を受け入れる。",
+                "inline": false
+              },
+              {
+                "name": "対象の使い方",
+                "value": "- 開発者が新しいプラグインインストールオプションを利用できるようになります。\n- Artifactツールを利用するユーザーは、一覧取得件数が増えることで作業効率が向上します。\n- プラグイン開発者は長文理由に起因するプロンプトドロップの問題から解放されます。",
+                "inline": false
+              },
+              {
+                "name": "主な変更",
+                "value": "- `claude plugin install` に `--marketplace <source>` オプションが追加され、ポリシー確認後にマーケットプレイスを自動追加してプラグインをインストールできるようになりました。\n- Artifactツールの一覧表示が最大200件に拡張されました。\n- プラグインのプロンプトドロップや設定拒否が長い理由で無視される問題を修正しました。",
+                "inline": false
+              },
+              {
+                "name": "詳細と原文",
+                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-06-v2.1.292.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.292)",
+                "inline": false
+              }
+            ],
+            "footer": {
+              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
+            },
+            "timestamp": "2026-10-06T18:59:30Z"
+          }
+        ]
+      },
+      "requires_publication": true
+    }
+  },
   "delivered": {
     "v2.1.280": {
       "message_id": "1553232397242212424",
