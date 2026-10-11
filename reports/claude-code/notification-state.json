@@ -1,6 +1,118 @@
 {
   "schema_version": 1,
-  "pending": {},
+  "pending": {
+    "v2.1.293": {
+      "payload": {
+        "allowed_mentions": {
+          "parse": []
+        },
+        "embeds": [
+          {
+            "title": "Claude Code v2.1.293｜次回更新時に確認",
+            "description": "56件の変更（新機能3件、改善5件、バグ修正33件、仕様変更3件、その他12件）。主な変更: Claude Haiku 5.5モデルがデフォルトとして追加され、1Mコンテキストと新料金が適用されました。 / 本リリースでは、Bash編集差分ノートの改善やスキル同期間隔の変更など、複数の機能改善と仕様変更が行われました。",
+            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-07-v2.1.293.md",
+            "color": 16096779,
+            "fields": [
+              {
+                "name": "対象の使い方",
+                "value": "- Windows環境のユーザーがプロセス終了の誤動作から保護されます。\n- Slack ワークスペース管理者が Enterprise Grid の設定エラーに対処できるようになります。\n- Claude Tag管理者やワークスペース所有者がチャンネルルール上限増加に対応できます。",
+                "inline": false
+              },
+              {
+                "name": "主な変更",
+                "value": "- Claude Haiku 5.5がデフォルトモデルとして導入され、1Mトークンのコンテキストが利用可能になりました。\n- Bash編集差分ノートが他プロセスの書き込みも表示するよう改善されました。\n- Windowsでステータスラインやフック、シェルコマンドが誤って別プロセスを終了させる問題を修正しました。",
+                "inline": false
+              },
+              {
+                "name": "詳細と原文",
+                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-07-v2.1.293.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.293)",
+                "inline": false
+              }
+            ],
+            "footer": {
+              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
+            },
+            "timestamp": "2026-10-07T18:10:20Z"
+          }
+        ]
+      },
+      "requires_publication": true
+    },
+    "v2.1.294": {
+      "payload": {
+        "allowed_mentions": {
+          "parse": []
+        },
+        "embeds": [
+          {
+            "title": "Claude Code v2.1.294｜次回更新時に確認",
+            "description": "`prompt` と `agent` フックの指示形式に関するバグ修正と、Stop／SubagentStop フックの判定ロジック改善により、フックの動作が正しく制御されるようになりました。",
+            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-08-v2.1.294.md",
+            "color": 9133302,
+            "fields": [
+              {
+                "name": "対象の使い方",
+                "value": "- プロンプトフックやエージェントフックを利用する開発者に対し、期待通りのブロック動作が保証されます。\n- ビルドやサブエージェントの停止判定に依存するワークフローが、不要な早期停止を回避できるようになります。",
+                "inline": false
+              },
+              {
+                "name": "主な変更",
+                "value": "- `prompt` と `agent` フックが指示として記述された場合に正しくブロックされるようになりました。\n- Stop と SubagentStop フックの判定が緩和され、Claude が早期に停止する可能性が低くなりました。",
+                "inline": false
+              },
+              {
+                "name": "詳細と原文",
+                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-08-v2.1.294.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.294)",
+                "inline": false
+              }
+            ],
+            "footer": {
+              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
+            },
+            "timestamp": "2026-10-08T05:03:54Z"
+          }
+        ]
+      },
+      "requires_publication": true
+    },
+    "v2.1.295": {
+      "payload": {
+        "allowed_mentions": {
+          "parse": []
+        },
+        "embeds": [
+          {
+            "title": "Claude Code v2.1.295｜次回更新時に確認",
+            "description": "143件の変更（新機能15件、改善11件、バグ修正85件、仕様変更13件、その他19件）。主な変更: 今回のリリースでは、コマンドやHTTPフックの失敗時にブロックする設定、OSC 7501 対応、コピー時の引用除去、プラグイン操作時の警告表示、端末での待機状態表示、クラウド上流タイムアウト設定の追加など、6つの新機能が追加されました。 / 本リリースでは、ボタンの子要素追加やリトライ待機時間設定などの新機能と、複数のモデルやサーバー接続に関するバグ修正が行われました。",
+            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-08-v2.1.295.md",
+            "color": 9133302,
+            "fields": [
+              {
+                "name": "対象の使い方",
+                "value": "- UI コンポーネントをカスタマイズする開発者に影響します。\n- プラグイン開発者はエラーメッセージに具体的な行情報が含まれるため、デバッグが容易になります。\n- macOS ユーザーがバックグラウンドセッションでフォルダーアクセスプロンプトの再表示を防止できる。",
+                "inline": false
+              },
+              {
+                "name": "主な変更",
+                "value": "- コマンドや HTTP フックが開始できない、タイムアウトする、または予期しない終了コードになると、アクションがブロックされる `onFailure: \"block\"` オプションが追加されました。\n- モジュールのボタンに文字列と Text を子要素として追加し、リスト行全体がプレス可能になりました。\n- ターン停止時に「Backgrounding cancelled」メッセージが表示されます。",
+                "inline": false
+              },
+              {
+                "name": "詳細と原文",
+                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-08-v2.1.295.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.295)",
+                "inline": false
+              }
+            ],
+            "footer": {
+              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
+            },
+            "timestamp": "2026-10-08T19:48:38Z"
+          }
+        ]
+      },
+      "requires_publication": true
+    }
+  },
   "delivered": {
     "v2.1.280": {
       "message_id": "1553232397242212424",
