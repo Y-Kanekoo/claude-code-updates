@@ -319,14 +319,14 @@ def test_groq_retries_only_retryable_http_errors(
         ({"retry-after-ms": "6130"}, 6.63),
         ({"retry-after": "6.13"}, 6.63),
         ({"x-ratelimit-reset-tokens": "6.13s"}, 6.63),
-        ({"x-ratelimit-reset-tokens": "1m2.5s"}, 60.0),
+        ({"x-ratelimit-reset-tokens": "1m2.5s"}, None),
     ],
     ids=["retry-after-ms", "retry-after", "token-reset", "compound-token-reset"],
 )
 def test_groq_429_uses_server_retry_headers(
     monkeypatch: pytest.MonkeyPatch,
     headers: dict[str, str],
-    expected_delay: float,
+    expected_delay: float | None,
 ) -> None:
     checker = build_checker()
     attempts = 0
@@ -341,8 +341,14 @@ def test_groq_429_uses_server_retry_headers(
 
     monkeypatch.setattr(check_module.time, "sleep", delays.append)
 
-    assert checker._call_groq_api(operation, "テスト") == "success"
-    assert delays == [expected_delay]
+    if expected_delay is None:
+        with pytest.raises(check_module.ProcessingDeferred):
+            checker._call_groq_api(operation, "テスト")
+        assert attempts == 1
+        assert delays == []
+    else:
+        assert checker._call_groq_api(operation, "テスト") == "success"
+        assert delays == [expected_delay]
 
 
 def test_groq_429_uses_message_retry_delay_as_fallback(
@@ -368,7 +374,7 @@ def test_groq_429_uses_message_retry_delay_as_fallback(
     assert delays == [6.63]
 
 
-def test_groq_429_caps_excessive_server_retry_delay(
+def test_groq_429_defers_instead_of_shortening_server_retry_delay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     checker = build_checker()
@@ -384,8 +390,10 @@ def test_groq_429_caps_excessive_server_retry_delay(
 
     monkeypatch.setattr(check_module.time, "sleep", delays.append)
 
-    assert checker._call_groq_api(operation, "テスト") == "success"
-    assert delays == [check_module.GROQ_MAX_RETRY_DELAY_SECONDS]
+    with pytest.raises(check_module.ProcessingDeferred):
+        checker._call_groq_api(operation, "テスト")
+    assert attempts == 1
+    assert delays == []
 
 
 @pytest.mark.parametrize(
