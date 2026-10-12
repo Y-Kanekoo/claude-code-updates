@@ -1,6 +1,44 @@
 {
   "schema_version": 1,
-  "pending": {},
+  "pending": {
+    "v2.1.296": {
+      "payload": {
+        "allowed_mentions": {
+          "parse": []
+        },
+        "embeds": [
+          {
+            "title": "Claude Code v2.1.296｜次回更新時に確認",
+            "description": "79件の変更（新機能6件、改善8件、バグ修正40件、仕様変更4件、その他21件）。主な変更: 本リリースでは、Claudeアプリやサブエージェントに複数の新機能が追加されました。 / 今回のリリースではデバッグ出力の改善やコスト計算の変更などが行われました。",
+            "url": "https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-09-v2.1.296.md",
+            "color": 16096779,
+            "fields": [
+              {
+                "name": "対象の使い方",
+                "value": "- MCPツール利用者は長い説明文を使用できるようになります。\n- ツールフックを利用する開発者に影響します。\n- MCPサーバーを利用するユーザーが認証時のエラーを回避できます。",
+                "inline": false
+              },
+              {
+                "name": "主な変更",
+                "value": "- `code`キーがClaudeアプリのgateway設定に追加され、Claude Desktopのゲートウェイモードが有効化されました。\n- `--debug` 出力が改善され、未認識フロントマター項目が表示され誤字のヒントが提供されます。\n- MCPツールとサーバ指示の文字数上限が2,048から4,096に増加しました。",
+                "inline": false
+              },
+              {
+                "name": "詳細と原文",
+                "value": "[日本語レポート](https://github.com/Y-Kanekoo/claude-code-updates/blob/main/reports/claude-code/2026-10-09-v2.1.296.md) · [公式リリース](https://github.com/anthropics/claude-code/releases/tag/v2.1.296)",
+                "inline": false
+              }
+            ],
+            "footer": {
+              "text": "自動要約・判定です。詳細は公式リリースで確認できます。"
+            },
+            "timestamp": "2026-10-09T19:28:59Z"
+          }
+        ]
+      },
+      "requires_publication": true
+    }
+  },
   "delivered": {
     "v2.1.280": {
       "message_id": "1553232397242212424",
