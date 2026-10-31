@@ -5,6 +5,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { extname, join } from "node:path";
+import process from "node:process";
 
 const patterns = {
   秘密鍵: /-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----/,
