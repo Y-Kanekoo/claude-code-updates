@@ -66,7 +66,9 @@ jobs:
         run: python scripts/check-groq-key-expiry.py
 
       - name: 依存パッケージをインストール
-        run: pip install --require-hashes -r requirements.txt
+        run: |
+          pip install --require-hashes -r requirements.txt
+          pip install --no-deps --no-build-isolation -r requirements-core.txt
 
       - name: レポートを生成
         id: generate_report

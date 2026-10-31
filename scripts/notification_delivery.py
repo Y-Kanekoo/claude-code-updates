@@ -14,6 +14,7 @@ from urllib import error, request
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit, quote
 
 try:
+    from discord_compat import clip as compatible_clip
     from report_schema import (
         extract_judgement,
         extract_summary,
@@ -21,6 +22,7 @@ try:
         pick_discord_color,
     )
 except ImportError:
+    from scripts.discord_compat import clip as compatible_clip
     from scripts.report_schema import (
         extract_judgement,
         extract_summary,
@@ -84,14 +86,7 @@ def atomic_json(path: Path, value: object) -> None:
 
 def clip(value: str, limit: int) -> str:
     """絵文字を含め、DiscordのUTF-16文字数制限以内に収める。"""
-    if len(value.encode("utf-16-le")) // 2 <= limit:
-        return value
-    return (
-        value.encode("utf-16-le")[: (limit - 1) * 2].decode(
-            "utf-16-le", errors="ignore"
-        )
-        + "…"
-    )
+    return compatible_clip(value, limit)
 
 
 def excerpt(body: str, count: int = 3, limit: int = 600) -> str:

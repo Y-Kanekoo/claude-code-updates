@@ -27,16 +27,23 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-          cache-dependency-path: requirements-dev.txt
+          cache-dependency-path: |
+            requirements-dev.txt
+            requirements-core.txt
 
       - name: Python依存関係を再現
-        run: pip install --require-hashes -r requirements-dev.txt
+        run: |
+          pip install --require-hashes -r requirements-dev.txt
+          pip install --no-deps --no-build-isolation -r requirements-core.txt
 
       - name: Pythonテスト
         run: pytest -q
 
       - name: Ruff
         run: ruff check --select E7,E9,F scripts
+
+      - name: radar-core互換層の型検査
+        run: mypy --strict --follow-imports=silent scripts/discord_compat.py
 
       - name: インデックスの再生成差分を検査
         run: python scripts/generate-index.py --check

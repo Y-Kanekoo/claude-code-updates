@@ -1,2 +1,6 @@
 requests==2.34.2
 groq==1.6.0
+# radar-core v0.1.0 の実行時依存と、分離ビルドを使わないためのビルド依存。
+httpx>=0.28,<1
+feedparser>=6.0,<7
+hatchling==1.27.0
