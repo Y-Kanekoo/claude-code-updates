@@ -1,0 +1,2 @@
+# ハッシュ付きlockとは分離し、タグの参照先を requirements-core.txt に固定する。
+radar-core @ git+https://github.com/Y-Kanekoo/radar-core@v0.1.0

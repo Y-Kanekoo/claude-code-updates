@@ -57,6 +57,8 @@ GitHub リポジトリの **Settings → Secrets and variables → Actions** に
 - `CI / Python・Workflow・lock検証` をmainの必須checkにする場合、レポート更新ワークフローの `github-actions[bot]` にRuleset bypassを許可するか、レポート更新自体をPR作成方式へ移行してください。現在はbotによるmainへの直接pushとの互換性を維持しています。
 - Ruffは既存違反を一括変更しないため、CIでは重大な構文・未定義名に絞って `E7,E9,F` を検査します。全rule適用は既存違反を目的別に解消した後の別段階とします。
 
+共有ライブラリ [radar-core v0.1.0](https://github.com/Y-Kanekoo/radar-core/tree/v0.1.0) は、第1段階としてDiscord通知のUTF-16切り詰めに利用しています。`requirements-core.in` のタグ指定を `requirements-core.txt` のコミットSHAへ固定し、本体だけを `--no-deps --no-build-isolation` で別途インストールします。ハッシュ付き依存の導入手順、互換性、次の段階の候補は [radar-coreの段階的導入](docs/radar-core.md) を参照してください。
+
 ## 通知とレポートの読み方
 
 - 更新通知は「何が変わったか」「必要な対応」「対象の使い方」に絞り、公開済みの日本語レポートと公式原文へリンクします。スライドは公開が別工程のため、更新通知には未公開のURLを載せません。
