@@ -1,0 +1,41 @@
+# local-ci の設定（development-hub テンプレート v1・テスト標準の4段階、既存repo向け）。
+# skip の段階は docs/TESTING.md のスキップ記録と合わせて、整備したら外す。
+fail_fast: true
+setup:
+  - npm ci --no-audit --no-fund
+jobs:
+  lint:
+    kind: lint
+    stage: static
+    run: "npm run lint"
+    skip: true
+    skip_reason: "package.json に lint がない（追加したら skip を外す）"
+  typecheck:
+    kind: typecheck
+    stage: static
+    run: "npm run typecheck"
+    skip: true
+    skip_reason: "package.json に typecheck がない（追加したら skip を外す）"
+  secrets:
+    kind: lint
+    stage: static
+    run: "node scripts/scan-secrets.mjs"
+  unit:
+    kind: test
+    stage: unit
+    run: "npm run test"
+    skip: true
+    skip_reason: "package.json に test がない（追加したら skip を外す）"
+  api:
+    kind: api
+    stage: api
+    run: "npm run test:api"
+    skip: true
+    skip_reason: "package.json に test:api がない（追加したら skip を外す）"
+  e2e:
+    kind: e2e
+    stage: e2e
+    run: "npx playwright test --grep @smoke"
+    skip: true
+    skip_reason: "Playwright 設定がない（UI がある場合は --extras e2e で雛形を追加）"
+include_auto: false
