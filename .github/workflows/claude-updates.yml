@@ -44,7 +44,7 @@ jobs:
           ref: ${{ github.ref_name }}
 
       - name: Python 3.11 をセットアップ
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
         with:
           python-version: '3.11'
           cache: 'pip'
@@ -166,7 +166,7 @@ jobs:
         if: >-
           ${{ always() && steps.commit_reports.outcome == 'success' &&
           steps.commit_reports.outputs.reports_published == 'true' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: slides-trigger
           path: ${{ runner.temp }}/slides-trigger/version.txt
@@ -210,7 +210,7 @@ jobs:
 
       - name: 送信確認を復元用成果物へ保存
         if: ${{ always() && !inputs.dry_run && steps.restore_notifications.outcome == 'success' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: notification-checkpoint
           path: reports/claude-code/notification-state.json
@@ -234,7 +234,7 @@ jobs:
 
       - name: 検証用レポートと通知状態を保存
         if: ${{ always() && (inputs.dry_run || failure()) }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: report-preview
           path: reports/claude-code
